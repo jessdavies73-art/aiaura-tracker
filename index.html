@@ -381,7 +381,21 @@ const COMM_RATES={
       accelerators:{deals5Month:{threshold:5,boostPct:5},mrr3k:{threshold:3000,boostPct:5},enterprise3Quarter:{threshold:3,bonus:1000},annualTopRep:{bonus:3000}}
     }
   },
-  Linka:{plans:null},
+  Linka:{
+    // Both Ricky and Katherine — usage-based model
+    commType:'usage',
+    baseRate:10, // 10% of monthly usage spend
+    durationMonths:12,
+    paidMonthly:true,
+    minUsage:0, // no minimum — just no commission if zero usage
+    accelerators:[
+      {threshold:0,rate:10},
+      {threshold:3000,rate:12},
+      {threshold:5000,rate:15}
+    ],
+    annualBonus:3, // 3% of total MRR from active clients in final month of financial year
+    plans:{'Usage-based':{price:0,commPct:10,commMonths:12}} // placeholder for modal
+  },
   Firelynx:{plans:null}
 };
 
@@ -1273,28 +1287,90 @@ function commissionTab(){
     <!-- SIGN-UPS LOG -->
     ${mySignups.length>0?`
     <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Sign-ups</div>
-    <div class="table-wrap"><table>
-      <thead><tr>${S.isAdmin?'<th>Staff</th>':''}<th>Client</th><th>Product</th><th>Plan</th><th>Sign-up bonus</th><th>Recurring</th><th>Date</th><th></th></tr></thead>
-      <tbody>
-      ${mySignups.slice().reverse().map(sg=>{
-        const rate=COMM_RATES[sg.product]?.plans?.[sg.plan]?.price||0;
-        const recAmt=sg.recurringActive?`£${(rate*(sg.recurringPct/100)).toFixed(2)}/mo`:'Not started';
-        return`<tr>
-          ${S.isAdmin?`<td style="font-weight:500">${sg.staff}</td>`:''}
-          <td><div style="font-size:13px;font-weight:500">${sg.company||sg.contactName||'—'}</div></td>
-          <td><span class="ptag pt-${PK[sg.product]||'aiaura'}">${sg.product}</span></td>
-          <td><span class="badge b-${(sg.plan||'').toLowerCase()}">${sg.plan}</span></td>
-          <td style="color:#3bbfad;font-weight:600">£${sg.signupBonus}</td>
-          <td>
-            <div style="font-size:12px;color:${sg.recurringActive?'#3bbfad':'var(--text-muted)'}">${recAmt}</div>
-            ${!sg.recurringActive?`<button class="demo-action-btn done-btn" style="font-size:10px;margin-top:4px" data-startrecurring="${sg.id}">Start recurring</button>`:`<div style="font-size:10px;color:var(--text-muted)">Month ${sg.recurringMonthsPaid||0}/${COMM_RATES[sg.product]?.recurringMonths||12}</div>`}
-          </td>
-          <td style="color:var(--text-muted);font-size:12px">${sg.date}</td>
-          <td><button class="icon-btn danger" data-delsg="${sg.id}">×</button></td>
-        </tr>`;
-      }).join('')}
-      </tbody>
-    </table></div>`:`<div class="empty-state" style="padding:2rem"><div class="icon">💰</div><p>No sign-ups logged yet.</p></div>`}
+
+    <!-- LINKA CLIENTS — grouped by client, month by month -->
+    ${(()=>{
+      const linkaEntries=mySignups.filter(sg=>sg.product==='Linka');
+      if(!linkaEntries.length)return'';
+      // Group by client name
+      const clients={};
+      linkaEntries.forEach(sg=>{
+        const key=sg.company||sg.contactName||sg.id;
+        if(!clients[key])clients[key]={name:key,staff:sg.staff,entries:[]};
+        clients[key].entries.push(sg);
+      });
+      return`<div style="margin-bottom:1.5rem">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;display:flex;align-items:center;gap:6px"><span class="ptag pt-linka">Linka</span> clients — usage based</div>
+        ${Object.values(clients).map(client=>{
+          const totalComm=client.entries.reduce((a,sg)=>a+sg.signupBonus,0);
+          const months=client.entries.length;
+          const expanded=S.expanded[`linka-${client.name}`];
+          return`<div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer" data-linkaexp="${client.name}">
+              <div style="flex:1">
+                <div style="font-size:13px;font-weight:500;color:#fff">${client.name}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${S.isAdmin?client.staff+' · ':''}${months} month${months!==1?'s':''} logged</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:16px;font-weight:600;color:#3bbfad">£${totalComm.toFixed(2)}</div>
+                <div style="font-size:10px;color:var(--text-muted)">total commission</div>
+              </div>
+              <div style="color:var(--text-muted);font-size:12px">${expanded?'▲':'▼'}</div>
+            </div>
+            ${expanded?`<div style="border-top:1px solid var(--border);padding:12px 16px">
+              <div style="display:flex;gap:8px;margin-bottom:10px">
+                <button class="action-btn" style="font-size:11px;padding:4px 10px" data-linkamonth="${client.name}">+ Add this month's usage</button>
+              </div>
+              <table style="width:100%;font-size:12px">
+                <thead><tr><th style="text-align:left;color:var(--text-muted);padding:4px 0;font-weight:500">Month</th><th style="text-align:right;color:var(--text-muted);padding:4px 0;font-weight:500">Usage spend</th><th style="text-align:right;color:var(--text-muted);padding:4px 0;font-weight:500">Commission rate</th><th style="text-align:right;color:var(--text-muted);padding:4px 0;font-weight:500">Commission</th><th></th></tr></thead>
+                <tbody>
+                  ${client.entries.slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).map((sg,i)=>{
+                    const usage=sg.signupBonus/(sg.recurringPct/100||0.1);
+                    const rate=sg.recurringPct||10;
+                    return`<tr style="border-top:1px solid rgba(255,255,255,0.04)">
+                      <td style="padding:6px 0;color:var(--text-secondary)">Month ${i+1} — ${sg.date}</td>
+                      <td style="text-align:right;color:var(--text-secondary)">£${usage.toFixed(2)}</td>
+                      <td style="text-align:right;color:var(--text-muted)">${rate}%</td>
+                      <td style="text-align:right;color:#3bbfad;font-weight:600">£${sg.signupBonus.toFixed(2)}</td>
+                      <td style="text-align:right"><button class="icon-btn danger" style="font-size:10px;padding:2px 6px" data-delsg="${sg.id}">×</button></td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>`:''}
+          </div>`;
+        }).join('')}
+      </div>`;
+    })()}
+
+    <!-- NON-LINKA SIGN-UPS — table as before -->
+    ${(()=>{
+      const nonLinka=mySignups.filter(sg=>sg.product!=='Linka');
+      if(!nonLinka.length)return'';
+      return`<div class="table-wrap"><table>
+        <thead><tr>${S.isAdmin?'<th>Staff</th>':''}<th>Client</th><th>Product</th><th>Plan</th><th>Commission</th><th>Recurring</th><th>Date</th><th></th></tr></thead>
+        <tbody>
+        ${nonLinka.slice().reverse().map(sg=>{
+          const prodRates=sg.product==='AIAURA'?null:COMM_RATES[sg.product]?.plans?.[sg.plan];
+          const recAmt=sg.recurringActive?`£${((prodRates?.price||0)*(sg.recurringPct/100)).toFixed(2)}/mo`:'Not started';
+          return`<tr>
+            ${S.isAdmin?`<td style="font-weight:500">${sg.staff}</td>`:''}
+            <td><div style="font-size:13px;font-weight:500">${sg.company||sg.contactName||'—'}</div></td>
+            <td><span class="ptag pt-${PK[sg.product]||'aiaura'}">${sg.product}</span></td>
+            <td style="font-size:12px">${sg.plan||'—'}</td>
+            <td style="color:#3bbfad;font-weight:600">£${sg.signupBonus}</td>
+            <td>
+              <div style="font-size:12px;color:${sg.recurringActive?'#3bbfad':'var(--text-muted)'}">${sg.product==='AIAURA'?`5% residual${sg.recurringActive?' active':''}`:recAmt}</div>
+              ${!sg.recurringActive?`<button class="demo-action-btn done-btn" style="font-size:10px;margin-top:4px" data-startrecurring="${sg.id}">Start recurring</button>`:`<div style="font-size:10px;color:var(--text-muted)">Month ${sg.recurringMonthsPaid||0}/12</div>`}
+            </td>
+            <td style="color:var(--text-muted);font-size:12px">${sg.date}</td>
+            <td><button class="icon-btn danger" data-delsg="${sg.id}">×</button></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table></div>`;
+    })()}
+    `:`<div class="empty-state" style="padding:2rem"><div class="icon">💰</div><p>No sign-ups logged yet.</p></div>`}
 
     <!-- BONUSES LOG -->
     ${myBonuses.length>0?`
@@ -1333,44 +1409,50 @@ function signupModal(){
   const l=S.signupLeadId?S.leads.find(x=>x.id===S.signupLeadId):null;
   const prod=S._signupProd||'PRODICTA';
   const isAIAURA=prod==='AIAURA';
-  // For AIAURA, get the right rates for this staff member
+  const isLinka=prod==='Linka';
   const staffForRates=S.isAdmin?(S._signupStaff||'Ricky'):S.user;
   const aiRates=isAIAURA?getAIAURARate(staffForRates):null;
-  const prodPlans=isAIAURA?aiRates?.plans:COMM_RATES[prod]?.plans;
+  const linkaRates=isLinka?COMM_RATES.Linka:null;
+  const prodPlans=isAIAURA?aiRates?.plans:isLinka?null:COMM_RATES[prod]?.plans;
   const plan=S._signupPlan||(prodPlans?Object.keys(prodPlans)[0]:'');
   const customPrice=S._signupCustomPrice||'';
   const selectedAddons=S._signupAddons||[];
+  const linkaUsage=parseFloat(S._linkaUsage||0);
 
-  let bonus=0;
-  if(isAIAURA&&aiRates&&plan){
-    const px=customPrice?parseFloat(customPrice):null;
-    bonus=calcAIAURAComm(staffForRates,plan,px);
+  // Calculate commission
+  let bonus=0,addonTotal=0;
+  if(isLinka){
+    // Linka: 10% of first month usage spend (activation month)
+    bonus=Math.round(linkaUsage*0.1*100)/100;
+  } else if(isAIAURA&&aiRates&&plan){
+    bonus=calcAIAURAComm(staffForRates,plan,customPrice?parseFloat(customPrice):null);
+    if(aiRates?.addonsDetailed) addonTotal=selectedAddons.reduce((a,k)=>a+(aiRates.addonsDetailed[k]||0),0);
+    else if(aiRates?.addons?.perAddon) addonTotal=selectedAddons.length*aiRates.addons.perAddon;
   } else if(prodPlans&&plan){
     bonus=prodPlans[plan]?.signup||0;
-  }
-
-  // Add-ons
-  let addonTotal=0;
-  if(isAIAURA&&aiRates?.addonsDetailed){
-    addonTotal=selectedAddons.reduce((a,k)=>a+(aiRates.addonsDetailed[k]||0),0);
-  } else if(isAIAURA&&aiRates?.addons?.perAddon){
-    addonTotal=selectedAddons.length*aiRates.addons.perAddon;
   }
   const totalBonus=Math.round((bonus+addonTotal)*100)/100;
   const planData=prodPlans?.[plan];
   const needsCustomPrice=isAIAURA&&planData?.customPrice;
-  const residualPct=isAIAURA?(aiRates?.residualPct||5):(COMM_RATES[prod]?.recurringPct||0);
+  const residualPct=isLinka?linkaRates?.baseRate:isAIAURA?(aiRates?.residualPct||5):(COMM_RATES[prod]?.recurringPct||0);
 
   return`<div class="modal-overlay"><div class="modal">
     <h3>Log sign-up & commission</h3>
-    ${l?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem;font-weight:500">${l.company||l.contactName||'Client'}</div>`:''}
+    ${l?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem;font-weight:500">${l.company||l.contactName||'Client'}</div>`:S._linkaClientName?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem;font-weight:500">${S._linkaClientName}</div>`:''}
     ${S.isAdmin?`<div class="form-field"><label class="form-label">Staff member</label><select id="sgstaff">
       ${COMM_STAFF.map(n=>`<option ${(S._signupStaff||staffForRates)===n?'selected':''}>${n}</option>`).join('')}
     </select></div>`:''}
     <div class="form-field"><label class="form-label">Product signed up to</label><select id="sgprod">
       ${PRODUCTS.map(p=>`<option ${p===prod?'selected':''}>${p}</option>`).join('')}
     </select></div>
-    ${prodPlans?`<div class="form-field"><label class="form-label">Plan</label><select id="sgplan">
+    ${isLinka?`
+    <div style="background:rgba(116,185,255,0.08);border:1px solid rgba(116,185,255,0.2);border-radius:8px;padding:12px 14px;margin-bottom:1rem;font-size:12px;color:var(--text-secondary)">
+      Linka is usage-based — commission is 10% of the client's actual monthly spend. Log the activation now, then add monthly usage spend each month to calculate commission.
+    </div>
+    <div class="form-field"><label class="form-label">First month usage spend (£) <span style="color:var(--text-muted);font-size:10px">(optional — enter 0 if not yet known)</span></label>
+      <input type="text" id="sglinkaUsage" placeholder="e.g. 450" value="${S._linkaUsage||''}"/>
+    </div>`
+    :prodPlans?`<div class="form-field"><label class="form-label">Plan</label><select id="sgplan">
       ${Object.entries(prodPlans).map(([p,v])=>`<option value="${p}" ${p===plan?'selected':''}>${p}${v.price&&!v.customPrice?' — £'+v.price+'/mo':v.customPrice?' — custom pricing':''}</option>`).join('')}
     </select></div>`:`<div class="form-field"><label class="form-label">Plan</label><input type="text" id="sgplan" placeholder="Plan name"/></div>`}
     ${needsCustomPrice?`<div class="form-field"><label class="form-label">Monthly price (£) <span style="color:var(--text-muted);font-size:10px">— custom pricing</span></label><input type="text" id="sgcustomprice" placeholder="e.g. 2500" value="${customPrice}"/></div>`:''}
@@ -1379,16 +1461,17 @@ function signupModal(){
         ${Object.entries(aiRates.addonsDetailed).map(([name,amt])=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-primary)"><input type="checkbox" class="sgaddon" data-addon="${name}" ${selectedAddons.includes(name)?'checked':''} style="accent-color:#3bbfad;width:14px;height:14px"/> ${name} <span style="color:#3bbfad">+£${amt}</span></label>`).join('')}
       </div></div>`
     :isAIAURA&&aiRates?.addons?.perAddon?`<div class="form-field"><label class="form-label">Add-ons sold <span style="color:var(--text-muted);font-size:10px">£${aiRates.addons.perAddon} each</span></label>
-      <input type="number" id="sgaddoncount" min="0" value="${selectedAddons.length||0}" placeholder="Number of add-ons sold" style="width:120px"/>
+      <input type="number" id="sgaddoncount" min="0" value="${selectedAddons.length||0}" style="width:120px"/>
     </div>`:''}
     <div style="background:rgba(59,191,173,0.08);border:1px solid rgba(59,191,173,0.25);border-radius:8px;padding:12px 14px;margin-bottom:1rem">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Commission breakdown</div>
+      ${isLinka?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">10% of £${linkaUsage.toFixed(2)} usage = £${bonus.toFixed(2)}</div><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Accelerator tiers: 12% at £3k+ / 15% at £5k+ monthly revenue</div>`:''}
       ${isAIAURA&&planData?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${planData.commPct}% × ${planData.isACV?'12 months ACV':planData.commMonths+' months MRR'} = £${bonus.toFixed(2)}</div>`:''}
       ${addonTotal>0?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">Add-ons: +£${addonTotal}</div>`:''}
       <div style="font-size:22px;font-weight:600;color:#3bbfad">£${totalBonus.toFixed(2)}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ ${residualPct}% residual from month 2 (paid quarterly, up to 12 months)</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${isLinka?'+ 10% of each month\'s usage for 12 months':'+ '+residualPct+'% residual from month 2 (paid quarterly, up to 12 months)'}</div>
     </div>
-    <div class="form-field"><label class="form-label">Date signed up</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
+    <div class="form-field"><label class="form-label">Date activated</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
     <div class="modal-actions"><button class="btn-cancel" id="sgcm">Cancel</button><button class="btn-save" id="sgsv">Log sign-up</button></div>
   </div></div>`;}
 
@@ -1620,8 +1703,8 @@ function bind(){
     r();};
   const sgplan=document.getElementById('sgplan');
   if(sgplan&&sgplan.tagName==='SELECT')sgplan.onchange=()=>{S._signupPlan=sgplan.value;S._signupCustomPrice='';r();};
-  const sgcp=document.getElementById('sgcustomprice');
-  if(sgcp)sgcp.oninput=()=>{S._signupCustomPrice=sgcp.value;r();};
+  const sglu=document.getElementById('sglinkaUsage');
+  if(sglu)sglu.oninput=()=>{S._linkaUsage=sglu.value;r();};
   document.querySelectorAll('.sgaddon').forEach(cb=>cb.onchange=()=>{
     const name=cb.dataset.addon;S._signupAddons=S._signupAddons||[];
     if(cb.checked)S._signupAddons=[...S._signupAddons,name];
@@ -1636,31 +1719,32 @@ function bind(){
     const staff=S.isAdmin?(document.getElementById('sgstaff')?.value||S.user):S.user;
     const prod=document.getElementById('sgprod').value;
     const planEl=document.getElementById('sgplan');
-    const plan=planEl?planEl.value:'';
+    const plan=planEl?planEl.value:(prod==='Linka'?'Usage-based':'');
     const isAIAURA=prod==='AIAURA';
+    const isLinka=prod==='Linka';
     const customPrice=document.getElementById('sgcustomprice')?.value||'';
     let bonus=0,addonTotal=0,residualPct=0;
-    if(isAIAURA){
+    if(isLinka){
+      const usage=parseFloat(document.getElementById('sglinkaUsage')?.value||0);
+      bonus=Math.round(usage*0.1*100)/100;
+      residualPct=10; // 10% of monthly usage ongoing
+    } else if(isAIAURA){
       const aiRates=getAIAURARate(staff);
       bonus=calcAIAURAComm(staff,plan,customPrice?parseFloat(customPrice):null);
       residualPct=aiRates?.residualPct||5;
-      if(aiRates?.addonsDetailed){
-        const selAddons=S._signupAddons||[];
-        addonTotal=selAddons.reduce((a,k)=>a+(aiRates.addonsDetailed[k]||0),0);
-      } else if(aiRates?.addons?.perAddon){
-        const cnt=parseInt(document.getElementById('sgaddoncount')?.value)||0;
-        addonTotal=cnt*aiRates.addons.perAddon;
-      }
+      if(aiRates?.addonsDetailed){const selAddons=S._signupAddons||[];addonTotal=selAddons.reduce((a,k)=>a+(aiRates.addonsDetailed[k]||0),0);}
+      else if(aiRates?.addons?.perAddon){const cnt=parseInt(document.getElementById('sgaddoncount')?.value)||0;addonTotal=cnt*aiRates.addons.perAddon;}
     } else {
       const prodPlans=COMM_RATES[prod]?.plans;
       bonus=prodPlans?.[plan]?.signup||0;
       residualPct=COMM_RATES[prod]?.recurringPct||0;
     }
     const totalBonus=Math.round((bonus+addonTotal)*100)/100;
-    const payload={staff,lead_id:l?l.id:null,company:l?l.company||l.contactName:'',contact_name:l?l.contactName:'',product:prod,plan,signup_bonus:totalBonus,recurring_pct:residualPct,recurring_active:false,recurring_months_paid:0,date:document.getElementById('sgdate').value};
+    const linkaClient=S._linkaClientName||'';
+    const payload={staff,lead_id:l?l.id:null,company:l?l.company||l.contactName:linkaClient,contact_name:l?l.contactName:linkaClient,product:prod,plan,signup_bonus:totalBonus,recurring_pct:residualPct,recurring_active:false,recurring_months_paid:0,date:document.getElementById('sgdate').value};
     await dbPost('tracker_signups',payload);
-    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Sign-up logged: ${prod} ${plan} — £${totalBonus} commission`});
-    // Check AIAURA accelerators — flag to admin only
+    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Sign-up logged: ${prod}${plan&&plan!=='Usage-based'?' '+plan:''} — £${totalBonus} commission`});
+    // Accelerator check for AIAURA
     if(prod==='AIAURA'&&S.isAdmin){
       const now2=new Date();const thisMonth2=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
       const staffCount=(S.signups||[]).filter(sg=>sg.staff===staff&&sg.product==='AIAURA'&&(sg.date||'').startsWith(thisMonth2)).length+1;
@@ -1669,7 +1753,17 @@ function bind(){
         S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`acc-${staff}-${Date.now()}`,isAccelerator:true,staff,msg:`${staff} has closed ${staffCount} AIAURA deals this month — +${accel.deals5Month.boostPct}% commission boost applies!`}];
       }
     }
-    S.showSignupModal=false;S._signupAddons=[];S._signupCustomPrice='';await loadAll();};
+    S.showSignupModal=false;S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';S._linkaClientName='';await loadAll();};
+  document.querySelectorAll('[data-linkaexp]').forEach(b=>b.onclick=()=>{
+    const key=`linka-${b.dataset.linkaexp}`;S.expanded[key]=!S.expanded[key];r();});
+  document.querySelectorAll('[data-linkamonth]').forEach(b=>b.onclick=()=>{
+    const clientName=b.dataset.linkamonth;
+    const existing=S.signups.find(sg=>sg.product==='Linka'&&(sg.company||sg.contactName)===clientName);
+    S.showSignupModal=true;S.signupLeadId=existing?.leadId||null;
+    S._signupProd='Linka';S._signupPlan='Usage-based';
+    S._signupStaff=existing?.staff||S.user;
+    S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';
+    S._linkaClientName=clientName;r();});
   document.querySelectorAll('[data-startrecurring]').forEach(b=>b.onclick=async()=>{
     await dbPatch('tracker_signups',b.dataset.startrecurring,{recurring_active:true,recurring_start_date:new Date().toISOString().slice(0,10)});
     await loadAll();});
