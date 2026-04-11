@@ -329,7 +329,8 @@
 const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50},Founding:{c:30}};
 const UB=40;
 const STAFF=['Ricky','Katherine','Ramsey'];
-const COMM_STAFF=['Ricky','Katherine']; // only these two earn commission
+const COMM_STAFF=['Ricky','Katherine','Ramsey']; // all three earn Firelynx commission
+const PRODICTA_AIAURA_STAFF=['Ricky','Katherine']; // only these two for PRODICTA/AIAURA/Linka
 const PIN='1234';
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
 const PK={Linka:'linka',AIAURA:'aiaura',PRODICTA:'prodicta',Firelynx:'firelynx'};
@@ -396,7 +397,20 @@ const COMM_RATES={
     annualBonus:3, // 3% of total MRR from active clients in final month of financial year
     plans:{'Usage-based':{price:0,commPct:10,commMonths:12}} // placeholder for modal
   },
-  Firelynx:{plans:null}
+  Firelynx:{
+    // All staff — one-off flat commission, no recurring
+    // Two price lists: Direct and Agency — same commission rates
+    commType:'flat',
+    plans:{
+      'Sprint (Direct)':    {price:995,  signup:Math.round(995*0.10),  label:'10%'},
+      'Flow (Direct)':      {price:1995, signup:Math.round(1995*0.10), label:'10%'},
+      'Pipeline (Direct)':  {price:2995, signup:Math.round(2995*0.15), label:'15%'},
+      'Sprint (Agency)':    {price:995,  signup:Math.round(995*0.10),  label:'10%'},
+      'Flow (Agency)':      {price:1695, signup:Math.round(1695*0.10), label:'10%'},
+      'Pipeline (Agency)':  {price:3250, signup:Math.round(3250*0.15), label:'15%'},
+    },
+    allStaff:true // Ricky, Katherine and Ramsey all earn this
+  }
 };
 
 // Get AIAURA rates for a specific staff member
@@ -1261,7 +1275,7 @@ function commissionTab(){
       <span class="sec-title">Commission</span>
       <button class="action-btn" id="ologsignup">+ Log sign-up</button>
     </div>
-    ${S.isAdmin?`<div class="filter-pills">${['All','Ricky','Katherine'].map(n=>`<button class="pill ${S.commFilter===n?'active':''}" data-cf="${n}">${n}</button>`).join('')}</div>`:''}
+    ${S.isAdmin?`<div class="filter-pills">${['All','Ricky','Katherine','Ramsey'].map(n=>`<button class="pill ${S.commFilter===n?'active':''}" data-cf="${n}">${n}</button>`).join('')}</div>`:''}
 
     <!-- TOTALS -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem">
@@ -1276,7 +1290,7 @@ function commissionTab(){
     ${S.isAdmin?`<div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1.5rem">
       <div style="font-size:12px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:1rem">This month — sign-up count</div>
       <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1rem">
-        ${COMM_STAFF.map(name=>{const cnt=thisMonthSignups.filter(sg=>sg.staff===name).length;return`<div><div style="font-size:13px;font-weight:500;color:#fff">${name}</div><div style="font-size:24px;font-weight:600;color:${cnt>=15?'#3bbfad':'#fac775'}">${cnt}</div><div style="font-size:11px;color:var(--text-muted)">${cnt>=15?'✓ Target hit':'of 15 target'}</div></div>`;}).join('')}
+        ${COMM_STAFF.map(name=>{const cnt=thisMonthSignups.filter(sg=>sg.staff===name).length;return`<div><div style="font-size:13px;font-weight:500;color:#fff">${name}</div><div style="font-size:24px;font-weight:600;color:${cnt>=15?'#3bbfad':'#fac775'}">${cnt}</div><div style="font-size:11px;color:var(--text-muted)">${name==='Ramsey'?'Firelynx only':cnt>=15?'✓ Target hit':'of 15 target'}</div></div>`;}).join('')}
       </div>
       ${allHit15?`<div style="background:rgba(59,191,173,0.12);border:1px solid rgba(59,191,173,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#3bbfad">🎉 Both hit 15+ this month — £${TEAM_TARGET_BONUS} team bonus each applies!</div>`:''}
       <div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap">
@@ -1443,7 +1457,11 @@ function signupModal(){
       ${COMM_STAFF.map(n=>`<option ${(S._signupStaff||staffForRates)===n?'selected':''}>${n}</option>`).join('')}
     </select></div>`:''}
     <div class="form-field"><label class="form-label">Product signed up to</label><select id="sgprod">
-      ${PRODUCTS.map(p=>`<option ${p===prod?'selected':''}>${p}</option>`).join('')}
+      ${PRODUCTS.filter(p=>{
+        const staff=S.isAdmin?(S._signupStaff||staffForRates):S.user;
+        if(p==='Firelynx')return true; // all staff
+        return PRODICTA_AIAURA_STAFF.includes(staff); // PRODICTA/AIAURA/Linka — Ricky & Katherine only
+      }).map(p=>`<option ${p===prod?'selected':''}>${p}</option>`).join('')}
     </select></div>
     ${isLinka?`
     <div style="background:rgba(116,185,255,0.08);border:1px solid rgba(116,185,255,0.2);border-radius:8px;padding:12px 14px;margin-bottom:1rem;font-size:12px;color:var(--text-secondary)">
@@ -1661,7 +1679,8 @@ function bind(){
     if(newStatus==='Demo booked'){S.showDemoModal=true;S.demoLeadId=l.id;S.rescheduleId=null;}
     if(newStatus==='Converted'&&COMM_STAFF.includes(l.staff)){
       const leadProd=l.products&&l.products[0]||'PRODICTA';
-      const validProd=(['PRODICTA','AIAURA'].includes(leadProd)&&(leadProd==='PRODICTA'||COMM_RATES.AIAURA[l.staff]))?leadProd:'PRODICTA';
+      // Ramsey can only sell Firelynx
+      const validProd=l.staff==='Ramsey'?'Firelynx':((['PRODICTA','AIAURA','Linka'].includes(leadProd)&&PRODICTA_AIAURA_STAFF.includes(l.staff))||leadProd==='Firelynx')?leadProd:'PRODICTA';
       let firstPlan='';
       if(validProd==='AIAURA'){const aiR=getAIAURARate(l.staff);firstPlan=Object.keys(aiR?.plans||{})[0]||'';}
       else{firstPlan=Object.keys(COMM_RATES[validProd]?.plans||{})[0]||'';}
@@ -1687,13 +1706,17 @@ function bind(){
   const ologsignup=document.getElementById('ologsignup');
   if(ologsignup)ologsignup.onclick=()=>{
     const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
-    S.showSignupModal=true;S.signupLeadId=null;S._signupProd='PRODICTA';S._signupPlan='Starter';S._signupAddons=[];S._signupCustomPrice='';S._signupStaff=defaultStaff;r();};
+    const defaultProd=defaultStaff==='Ramsey'?'Firelynx':'PRODICTA';
+    const defaultPlan=Object.keys(COMM_RATES[defaultProd]?.plans||{})[0]||'';
+    S.showSignupModal=true;S.signupLeadId=null;S._signupProd=defaultProd;S._signupPlan=defaultPlan;S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';S._signupStaff=defaultStaff;r();};
   const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;S._signupAddons=[];r();};
   // Staff change — reload plans for AIAURA
   const sgstaff=document.getElementById('sgstaff');
   if(sgstaff)sgstaff.onchange=()=>{
     S._signupStaff=sgstaff.value;
-    if(S._signupProd==='AIAURA'){const aiRates=getAIAURARate(sgstaff.value);S._signupPlan=Object.keys(aiRates?.plans||{})[0]||'';}
+    // Ramsey can only do Firelynx
+    if(sgstaff.value==='Ramsey'){S._signupProd='Firelynx';S._signupPlan=Object.keys(COMM_RATES.Firelynx.plans)[0];}
+    else if(S._signupProd==='AIAURA'){const aiRates=getAIAURARate(sgstaff.value);S._signupPlan=Object.keys(aiRates?.plans||{})[0]||'';}
     S._signupAddons=[];S._signupCustomPrice='';r();};
   const sgprod=document.getElementById('sgprod');
   if(sgprod)sgprod.onchange=()=>{
