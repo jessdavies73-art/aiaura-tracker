@@ -351,40 +351,49 @@ const COMM_RATES={
     commType:'flat'
   },
   AIAURA:{
-    // Ricky only — 25%×3mo for Starter/Essential, 25%×6mo for Pro/Pro+/Advanced, 15%×12mo ACV for Enterprise
-    plans:{
-      Starter:{price:120,commPct:25,commMonths:3,tier:'starter'},
-      Essential:{price:249,commPct:25,commMonths:3,tier:'starter'},
-      Pro:{price:499,commPct:25,commMonths:6,tier:'growth'},
-      'Pro+':{price:699,commPct:25,commMonths:6,tier:'growth'},
-      Advanced:{price:899,commPct:25,commMonths:6,tier:'growth'},
-      Enterprise:{price:4000,commPct:15,commMonths:12,tier:'enterprise'}
+    // Split by staff member — Ricky and Katherine have different structures
+    Ricky:{
+      plans:{
+        Starter:{price:120,commPct:25,commMonths:3},
+        Essential:{price:249,commPct:25,commMonths:3},
+        Pro:{price:499,commPct:25,commMonths:6},
+        'Pro+':{price:699,commPct:25,commMonths:6},
+        Advanced:{price:899,commPct:25,commMonths:6},
+        Enterprise:{price:4000,commPct:15,commMonths:12,isACV:true,customPrice:true}
+      },
+      addons:{perAddon:15}, // Branded Portal +£15, ATS +£10, Job Posting +£5
+      addonsDetailed:{'Branded Candidate Portal':15,'Extra ATS Integration':10,'Additional Job Posting':5},
+      residualPct:5,residualMonths:12,residualPaidQuarterly:true,
+      accelerators:{deals5Month:{threshold:5,boostPct:10},mrr3k:{threshold:3000,boostPct:10},enterprise3Quarter:{threshold:3,bonus:1000},annualTopRep:{bonus:3000}}
     },
-    addons:{
-      'Branded Candidate Portal':15,
-      'Extra ATS Integration':10,
-      'Additional Job Posting':5
-    },
-    residualPct:5,
-    residualMonths:12,
-    residualPaidQuarterly:true,
-    accelerators:{
-      deals5Month:{threshold:5,boostPct:10},
-      mrr3k:{threshold:3000,boostPct:10},
-      enterprise3Quarter:{threshold:3,bonus:1000},
-      annualTopRep:{bonus:3000}
-    },
-    commType:'mrr',
-    rickyOnly:true
+    Katherine:{
+      plans:{
+        Essential:{price:249,commPct:15,commMonths:3},
+        Pro:{price:499,commPct:15,commMonths:3},
+        'Pro+':{price:699,commPct:15,commMonths:3},
+        Advanced:{price:899,commPct:15,commMonths:3},
+        'Enterprise Lite':{price:2000,commPct:10,commMonths:12,isACV:true,customPrice:true},
+        'Enterprise Standard':{price:3000,commPct:10,commMonths:12,isACV:true,customPrice:true},
+        'Enterprise Pro':{price:4000,commPct:10,commMonths:12,isACV:true,customPrice:true}
+      },
+      addons:{perAddon:5}, // £5 flat per add-on
+      residualPct:5,residualMonths:12,residualPaidQuarterly:true,
+      accelerators:{deals5Month:{threshold:5,boostPct:5},mrr3k:{threshold:3000,boostPct:5},enterprise3Quarter:{threshold:3,bonus:1000},annualTopRep:{bonus:3000}}
+    }
   },
   Linka:{plans:null},
   Firelynx:{plans:null}
 };
 
-// Calculate AIAURA commission for a given plan
-function calcAIAURAComm(plan,customPrice){
-  const p=COMM_RATES.AIAURA.plans[plan];if(!p)return 0;
-  const price=customPrice||p.price;
+// Get AIAURA rates for a specific staff member
+function getAIAURARate(staff){return COMM_RATES.AIAURA[staff]||null;}
+
+// Calculate AIAURA commission for a given plan and staff
+function calcAIAURAComm(staff,plan,customPrice){
+  const rates=getAIAURARate(staff);if(!rates)return 0;
+  const p=rates.plans[plan];if(!p)return 0;
+  const price=customPrice?parseFloat(customPrice):p.price||0;
+  if(p.isACV){return Math.round(price*(p.commPct/100)*12*100)/100;} // ACV = monthly × 12
   return Math.round(price*(p.commPct/100)*p.commMonths*100)/100;
 }
 
@@ -1323,45 +1332,61 @@ function commissionTab(){
 function signupModal(){
   const l=S.signupLeadId?S.leads.find(x=>x.id===S.signupLeadId):null;
   const prod=S._signupProd||'PRODICTA';
-  const rates=COMM_RATES[prod];
-  const prodPlans=rates?.plans;
-  const plan=S._signupPlan||(prodPlans?Object.keys(prodPlans)[0]:'');
   const isAIAURA=prod==='AIAURA';
+  // For AIAURA, get the right rates for this staff member
+  const staffForRates=S.isAdmin?(S._signupStaff||'Ricky'):S.user;
+  const aiRates=isAIAURA?getAIAURARate(staffForRates):null;
+  const prodPlans=isAIAURA?aiRates?.plans:COMM_RATES[prod]?.plans;
+  const plan=S._signupPlan||(prodPlans?Object.keys(prodPlans)[0]:'');
   const customPrice=S._signupCustomPrice||'';
+  const selectedAddons=S._signupAddons||[];
 
   let bonus=0;
-  if(isAIAURA&&prodPlans&&plan){
-    const px=customPrice?parseFloat(customPrice):prodPlans[plan]?.price||0;
-    bonus=calcAIAURAComm(plan,px);
+  if(isAIAURA&&aiRates&&plan){
+    const px=customPrice?parseFloat(customPrice):null;
+    bonus=calcAIAURAComm(staffForRates,plan,px);
   } else if(prodPlans&&plan){
     bonus=prodPlans[plan]?.signup||0;
   }
 
-  const selectedAddons=S._signupAddons||[];
-  const addonTotal=selectedAddons.reduce((a,k)=>a+(rates?.addons?.[k]||0),0);
-  const totalBonus=bonus+addonTotal;
+  // Add-ons
+  let addonTotal=0;
+  if(isAIAURA&&aiRates?.addonsDetailed){
+    addonTotal=selectedAddons.reduce((a,k)=>a+(aiRates.addonsDetailed[k]||0),0);
+  } else if(isAIAURA&&aiRates?.addons?.perAddon){
+    addonTotal=selectedAddons.length*aiRates.addons.perAddon;
+  }
+  const totalBonus=Math.round((bonus+addonTotal)*100)/100;
+  const planData=prodPlans?.[plan];
+  const needsCustomPrice=isAIAURA&&planData?.customPrice;
+  const residualPct=isAIAURA?(aiRates?.residualPct||5):(COMM_RATES[prod]?.recurringPct||0);
 
   return`<div class="modal-overlay"><div class="modal">
     <h3>Log sign-up & commission</h3>
     ${l?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem;font-weight:500">${l.company||l.contactName||'Client'}</div>`:''}
-    ${S.isAdmin?`<div class="form-field"><label class="form-label">Staff member</label><select id="sgstaff">${COMM_STAFF.map(n=>`<option>${n}</option>`).join('')}</select></div>`:''}
+    ${S.isAdmin?`<div class="form-field"><label class="form-label">Staff member</label><select id="sgstaff">
+      ${COMM_STAFF.map(n=>`<option ${(S._signupStaff||staffForRates)===n?'selected':''}>${n}</option>`).join('')}
+    </select></div>`:''}
     <div class="form-field"><label class="form-label">Product signed up to</label><select id="sgprod">
       ${PRODUCTS.map(p=>`<option ${p===prod?'selected':''}>${p}</option>`).join('')}
     </select></div>
     ${prodPlans?`<div class="form-field"><label class="form-label">Plan</label><select id="sgplan">
-      ${Object.entries(prodPlans).map(([p,v])=>`<option value="${p}" ${p===plan?'selected':''}>${p}${v.price?' — £'+v.price+'/mo':''}</option>`).join('')}
+      ${Object.entries(prodPlans).map(([p,v])=>`<option value="${p}" ${p===plan?'selected':''}>${p}${v.price&&!v.customPrice?' — £'+v.price+'/mo':v.customPrice?' — custom pricing':''}</option>`).join('')}
     </select></div>`:`<div class="form-field"><label class="form-label">Plan</label><input type="text" id="sgplan" placeholder="Plan name"/></div>`}
-    ${isAIAURA&&prodPlans&&plan&&prodPlans[plan]?.tier==='enterprise'?`<div class="form-field"><label class="form-label">Custom monthly price (£) <span style="color:var(--text-muted);font-size:10px">— Enterprise pricing varies</span></label><input type="text" id="sgcustomprice" placeholder="e.g. 4000" value="${customPrice}"/></div>`:''}
-    ${isAIAURA&&rates?.addons?`<div class="form-field"><label class="form-label">Add-ons sold <span style="color:var(--text-muted);font-size:10px">(optional)</span></label>
+    ${needsCustomPrice?`<div class="form-field"><label class="form-label">Monthly price (£) <span style="color:var(--text-muted);font-size:10px">— custom pricing</span></label><input type="text" id="sgcustomprice" placeholder="e.g. 2500" value="${customPrice}"/></div>`:''}
+    ${isAIAURA&&aiRates?.addonsDetailed?`<div class="form-field"><label class="form-label">Add-ons sold <span style="color:var(--text-muted);font-size:10px">(optional)</span></label>
       <div style="display:flex;flex-direction:column;gap:6px">
-        ${Object.entries(rates.addons).map(([name,amt])=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-primary)"><input type="checkbox" class="sgaddon" data-addon="${name}" ${selectedAddons.includes(name)?'checked':''} style="accent-color:#3bbfad;width:14px;height:14px"/> ${name} <span style="color:#3bbfad">+£${amt}</span></label>`).join('')}
-      </div></div>`:''}
+        ${Object.entries(aiRates.addonsDetailed).map(([name,amt])=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-primary)"><input type="checkbox" class="sgaddon" data-addon="${name}" ${selectedAddons.includes(name)?'checked':''} style="accent-color:#3bbfad;width:14px;height:14px"/> ${name} <span style="color:#3bbfad">+£${amt}</span></label>`).join('')}
+      </div></div>`
+    :isAIAURA&&aiRates?.addons?.perAddon?`<div class="form-field"><label class="form-label">Add-ons sold <span style="color:var(--text-muted);font-size:10px">£${aiRates.addons.perAddon} each</span></label>
+      <input type="number" id="sgaddoncount" min="0" value="${selectedAddons.length||0}" placeholder="Number of add-ons sold" style="width:120px"/>
+    </div>`:''}
     <div style="background:rgba(59,191,173,0.08);border:1px solid rgba(59,191,173,0.25);border-radius:8px;padding:12px 14px;margin-bottom:1rem">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${isAIAURA?`Commission breakdown`:'Sign-up bonus'}</div>
-      ${isAIAURA&&prodPlans&&plan?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${prodPlans[plan]?.commPct||0}% × ${prodPlans[plan]?.commMonths||0} months = £${bonus.toFixed(2)}</div>`:''}
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Commission breakdown</div>
+      ${isAIAURA&&planData?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${planData.commPct}% × ${planData.isACV?'12 months ACV':planData.commMonths+' months MRR'} = £${bonus.toFixed(2)}</div>`:''}
       ${addonTotal>0?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">Add-ons: +£${addonTotal}</div>`:''}
       <div style="font-size:22px;font-weight:600;color:#3bbfad">£${totalBonus.toFixed(2)}</div>
-      ${isAIAURA?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ 5% residual from month 2 (paid quarterly, up to 12 months)</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ ${rates?.recurringPct||0}% recurring from month 2</div>`}
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ ${residualPct}% residual from month 2 (paid quarterly, up to 12 months)</div>
     </div>
     <div class="form-field"><label class="form-label">Date signed up</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
     <div class="modal-actions"><button class="btn-cancel" id="sgcm">Cancel</button><button class="btn-save" id="sgsv">Log sign-up</button></div>
@@ -1552,12 +1577,12 @@ function bind(){
     await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Status changed: ${old} → ${newStatus}`});
     if(newStatus==='Demo booked'){S.showDemoModal=true;S.demoLeadId=l.id;S.rescheduleId=null;}
     if(newStatus==='Converted'&&COMM_STAFF.includes(l.staff)){
-      // Pre-select product based on what was on the lead
       const leadProd=l.products&&l.products[0]||'PRODICTA';
-      const validProd=COMM_RATES[leadProd]?.plans?leadProd:'PRODICTA';
-      // AIAURA commission is Ricky only
-      if(validProd==='AIAURA'&&l.staff!=='Ricky'){S.showSignupModal=false;}
-      else{S.showSignupModal=true;S.signupLeadId=l.id;S._signupProd=validProd;S._signupPlan=Object.keys(COMM_RATES[validProd]?.plans||{})[0]||'';S._signupAddons=[];S._signupCustomPrice='';}
+      const validProd=(['PRODICTA','AIAURA'].includes(leadProd)&&(leadProd==='PRODICTA'||COMM_RATES.AIAURA[l.staff]))?leadProd:'PRODICTA';
+      let firstPlan='';
+      if(validProd==='AIAURA'){const aiR=getAIAURARate(l.staff);firstPlan=Object.keys(aiR?.plans||{})[0]||'';}
+      else{firstPlan=Object.keys(COMM_RATES[validProd]?.plans||{})[0]||'';}
+      S.showSignupModal=true;S.signupLeadId=l.id;S._signupProd=validProd;S._signupPlan=firstPlan;S._signupAddons=[];S._signupCustomPrice='';S._signupStaff=l.staff;
     }
     await loadAll();});
   document.querySelectorAll('[data-editdemoprods]').forEach(b=>b.onclick=()=>{
@@ -1577,20 +1602,34 @@ function bind(){
   // Commission tab
   document.querySelectorAll('[data-cf]').forEach(f=>f.onclick=()=>{S.commFilter=f.dataset.cf;r();});
   const ologsignup=document.getElementById('ologsignup');
-  if(ologsignup)ologsignup.onclick=()=>{S.showSignupModal=true;S.signupLeadId=null;S._signupProd='PRODICTA';S._signupPlan='Starter';S._signupAddons=[];S._signupCustomPrice='';r();};
+  if(ologsignup)ologsignup.onclick=()=>{
+    const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
+    S.showSignupModal=true;S.signupLeadId=null;S._signupProd='PRODICTA';S._signupPlan='Starter';S._signupAddons=[];S._signupCustomPrice='';S._signupStaff=defaultStaff;r();};
   const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;S._signupAddons=[];r();};
+  // Staff change — reload plans for AIAURA
+  const sgstaff=document.getElementById('sgstaff');
+  if(sgstaff)sgstaff.onchange=()=>{
+    S._signupStaff=sgstaff.value;
+    if(S._signupProd==='AIAURA'){const aiRates=getAIAURARate(sgstaff.value);S._signupPlan=Object.keys(aiRates?.plans||{})[0]||'';}
+    S._signupAddons=[];S._signupCustomPrice='';r();};
   const sgprod=document.getElementById('sgprod');
-  if(sgprod)sgprod.onchange=()=>{S._signupProd=sgprod.value;S._signupAddons=[];S._signupCustomPrice='';const firstPlan=Object.keys(COMM_RATES[sgprod.value]?.plans||{})[0]||'';S._signupPlan=firstPlan;r();};
+  if(sgprod)sgprod.onchange=()=>{
+    S._signupProd=sgprod.value;S._signupAddons=[];S._signupCustomPrice='';
+    if(sgprod.value==='AIAURA'){const staff=S._signupStaff||(COMM_STAFF.includes(S.user)?S.user:'Ricky');const aiRates=getAIAURARate(staff);S._signupPlan=Object.keys(aiRates?.plans||{})[0]||'';}
+    else{S._signupPlan=Object.keys(COMM_RATES[sgprod.value]?.plans||{})[0]||'';}
+    r();};
   const sgplan=document.getElementById('sgplan');
-  if(sgplan&&sgplan.tagName==='SELECT')sgplan.onchange=()=>{S._signupPlan=sgplan.value;r();};
+  if(sgplan&&sgplan.tagName==='SELECT')sgplan.onchange=()=>{S._signupPlan=sgplan.value;S._signupCustomPrice='';r();};
   const sgcp=document.getElementById('sgcustomprice');
   if(sgcp)sgcp.oninput=()=>{S._signupCustomPrice=sgcp.value;r();};
   document.querySelectorAll('.sgaddon').forEach(cb=>cb.onchange=()=>{
-    const name=cb.dataset.addon;
-    S._signupAddons=S._signupAddons||[];
+    const name=cb.dataset.addon;S._signupAddons=S._signupAddons||[];
     if(cb.checked)S._signupAddons=[...S._signupAddons,name];
-    else S._signupAddons=S._signupAddons.filter(x=>x!==name);
-    r();});
+    else S._signupAddons=S._signupAddons.filter(x=>x!==name);r();});
+  // Katherine's per-addon count field
+  const sgac=document.getElementById('sgaddoncount');
+  if(sgac)sgac.oninput=()=>{
+    const n=parseInt(sgac.value)||0;S._signupAddons=Array(n).fill('addon');r();};
   const sgsv=document.getElementById('sgsv');
   if(sgsv)sgsv.onclick=async()=>{
     const l=S.signupLeadId?S.leads.find(x=>x.id===S.signupLeadId):null;
@@ -1598,25 +1637,37 @@ function bind(){
     const prod=document.getElementById('sgprod').value;
     const planEl=document.getElementById('sgplan');
     const plan=planEl?planEl.value:'';
-    const rates=COMM_RATES[prod];
-    const prodPlans=rates?.plans;
     const isAIAURA=prod==='AIAURA';
     const customPrice=document.getElementById('sgcustomprice')?.value||'';
-    let bonus=0;
-    if(isAIAURA&&prodPlans&&plan){bonus=calcAIAURAComm(plan,customPrice?parseFloat(customPrice):null);}
-    else if(prodPlans&&plan){bonus=prodPlans[plan]?.signup||0;}
-    const selectedAddons=S._signupAddons||[];
-    const addonTotal=selectedAddons.reduce((a,k)=>a+(rates?.addons?.[k]||0),0);
+    let bonus=0,addonTotal=0,residualPct=0;
+    if(isAIAURA){
+      const aiRates=getAIAURARate(staff);
+      bonus=calcAIAURAComm(staff,plan,customPrice?parseFloat(customPrice):null);
+      residualPct=aiRates?.residualPct||5;
+      if(aiRates?.addonsDetailed){
+        const selAddons=S._signupAddons||[];
+        addonTotal=selAddons.reduce((a,k)=>a+(aiRates.addonsDetailed[k]||0),0);
+      } else if(aiRates?.addons?.perAddon){
+        const cnt=parseInt(document.getElementById('sgaddoncount')?.value)||0;
+        addonTotal=cnt*aiRates.addons.perAddon;
+      }
+    } else {
+      const prodPlans=COMM_RATES[prod]?.plans;
+      bonus=prodPlans?.[plan]?.signup||0;
+      residualPct=COMM_RATES[prod]?.recurringPct||0;
+    }
     const totalBonus=Math.round((bonus+addonTotal)*100)/100;
-    const recurringPct=isAIAURA?(rates?.residualPct||5):(rates?.recurringPct||0);
-    const payload={staff,lead_id:l?l.id:null,company:l?l.company||l.contactName:'',contact_name:l?l.contactName:'',product:prod,plan,signup_bonus:totalBonus,recurring_pct:recurringPct,recurring_active:false,recurring_months_paid:0,date:document.getElementById('sgdate').value};
+    const payload={staff,lead_id:l?l.id:null,company:l?l.company||l.contactName:'',contact_name:l?l.contactName:'',product:prod,plan,signup_bonus:totalBonus,recurring_pct:residualPct,recurring_active:false,recurring_months_paid:0,date:document.getElementById('sgdate').value};
     await dbPost('tracker_signups',payload);
-    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Sign-up logged: ${prod} ${plan} — £${totalBonus} commission${selectedAddons.length?' (+'+selectedAddons.join(', ')+')'':''}`});
-    // Check AIAURA accelerators for Ricky — flag to admin
-    if(prod==='AIAURA'&&staff==='Ricky'&&S.isAdmin){
+    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Sign-up logged: ${prod} ${plan} — £${totalBonus} commission`});
+    // Check AIAURA accelerators — flag to admin only
+    if(prod==='AIAURA'&&S.isAdmin){
       const now2=new Date();const thisMonth2=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
-      const rickyThisMonth=(S.signups||[]).filter(sg=>sg.staff==='Ricky'&&sg.product==='AIAURA'&&(sg.date||'').startsWith(thisMonth2)).length+1;
-      if(rickyThisMonth>=5)S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`acc-deals-${Date.now()}`,company:'Accelerator hit!',newDt:'',staff:'Ricky',leadId:null,isAccelerator:true,msg:`Ricky has closed ${rickyThisMonth} AIAURA deals this month — +10% commission boost applies!`}];
+      const staffCount=(S.signups||[]).filter(sg=>sg.staff===staff&&sg.product==='AIAURA'&&(sg.date||'').startsWith(thisMonth2)).length+1;
+      const accel=COMM_RATES.AIAURA[staff]?.accelerators;
+      if(accel&&staffCount>=accel.deals5Month.threshold){
+        S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`acc-${staff}-${Date.now()}`,isAccelerator:true,staff,msg:`${staff} has closed ${staffCount} AIAURA deals this month — +${accel.deals5Month.boostPct}% commission boost applies!`}];
+      }
     }
     S.showSignupModal=false;S._signupAddons=[];S._signupCustomPrice='';await loadAll();};
   document.querySelectorAll('[data-startrecurring]').forEach(b=>b.onclick=async()=>{
