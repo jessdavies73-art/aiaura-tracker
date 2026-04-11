@@ -355,12 +355,12 @@ const COMM_RATES={
     // Split by staff member — Ricky and Katherine have different structures
     Ricky:{
       plans:{
-        Starter:{price:120,commPct:25,commMonths:3},
-        Essential:{price:249,commPct:25,commMonths:3},
-        Pro:{price:499,commPct:25,commMonths:6},
-        'Pro+':{price:699,commPct:25,commMonths:6},
-        Advanced:{price:899,commPct:25,commMonths:6},
-        Enterprise:{price:4000,commPct:15,commMonths:12,isACV:true,customPrice:true}
+        Starter:       {price:120, commPct:25, commMonths:3,  isACV:false, customPrice:false},
+        Essential:     {price:249, commPct:25, commMonths:3,  isACV:false, customPrice:false},
+        Pro:           {price:499, commPct:25, commMonths:6,  isACV:false, customPrice:false},
+        'Pro+':        {price:699, commPct:15, commMonths:12, isACV:true,  customPrice:false},
+        Advanced:      {price:899, commPct:15, commMonths:12, isACV:true,  customPrice:false},
+        Enterprise:    {price:4000,commPct:15, commMonths:12, isACV:true,  customPrice:true}
       },
       addons:{perAddon:15}, // Branded Portal +£15, ATS +£10, Job Posting +£5
       addonsDetailed:{'Branded Candidate Portal':15,'Extra ATS Integration':10,'Additional Job Posting':5},
@@ -369,13 +369,14 @@ const COMM_RATES={
     },
     Katherine:{
       plans:{
-        Essential:{price:249,commPct:15,commMonths:3},
-        Pro:{price:499,commPct:15,commMonths:3},
-        'Pro+':{price:699,commPct:15,commMonths:3},
-        Advanced:{price:899,commPct:15,commMonths:3},
-        'Enterprise Lite':{price:2000,commPct:10,commMonths:12,isACV:true,customPrice:true},
-        'Enterprise Standard':{price:3000,commPct:10,commMonths:12,isACV:true,customPrice:true},
-        'Enterprise Pro':{price:4000,commPct:10,commMonths:12,isACV:true,customPrice:true}
+        Starter:              {price:120, commPct:15, commMonths:3,  isACV:false, customPrice:false},
+        Essential:            {price:249, commPct:15, commMonths:3,  isACV:false, customPrice:false},
+        Pro:                  {price:499, commPct:15, commMonths:3,  isACV:false, customPrice:false},
+        'Pro+':               {price:699, commPct:10, commMonths:12, isACV:true,  customPrice:false},
+        Advanced:             {price:899, commPct:10, commMonths:12, isACV:true,  customPrice:false},
+        'Enterprise Lite':    {price:2000,commPct:10, commMonths:12, isACV:true,  customPrice:true},
+        'Enterprise Standard':{price:3000,commPct:10, commMonths:12, isACV:true,  customPrice:true},
+        'Enterprise Pro':     {price:4000,commPct:10, commMonths:12, isACV:true,  customPrice:true}
       },
       addons:{perAddon:5}, // £5 flat per add-on
       residualPct:5,residualMonths:12,residualPaidQuarterly:true,
@@ -416,13 +417,13 @@ const COMM_RATES={
 // Get AIAURA rates for a specific staff member
 function getAIAURARate(staff){return COMM_RATES.AIAURA[staff]||null;}
 
-// Calculate AIAURA commission for a given plan and staff
+// Calculate AIAURA commission — MRR plans: % × monthly price × months. ACV plans: % × monthly price × 12
 function calcAIAURAComm(staff,plan,customPrice){
   const rates=getAIAURARate(staff);if(!rates)return 0;
   const p=rates.plans[plan];if(!p)return 0;
   const price=customPrice?parseFloat(customPrice):p.price||0;
-  if(p.isACV){return Math.round(price*(p.commPct/100)*12*100)/100;} // ACV = monthly × 12
-  return Math.round(price*(p.commPct/100)*p.commMonths*100)/100;
+  const months=p.isACV?12:p.commMonths;
+  return Math.round(price*(p.commPct/100)*months*100)/100;
 }
 
 // Team bonus thresholds
@@ -502,7 +503,8 @@ async function loadAll(){
       contactName:sg.contact_name||'',product:sg.product||'',plan:sg.plan||'',
       signupBonus:sg.signup_bonus||0,recurringPct:sg.recurring_pct||0,
       recurringActive:sg.recurring_active||false,recurringStartDate:sg.recurring_start_date||null,
-      recurringMonthsPaid:sg.recurring_months_paid||0,date:sg.date||''
+      recurringMonthsPaid:sg.recurring_months_paid||0,date:sg.date||'',
+      clientCancelled:sg.client_cancelled||false
     }));
     S.bonuses=(bonuses||[]).map(b=>({
       id:b.id,staff:b.staff,type:b.type||'',amount:b.amount||0,
@@ -1362,20 +1364,49 @@ function commissionTab(){
       const nonLinka=mySignups.filter(sg=>sg.product!=='Linka');
       if(!nonLinka.length)return'';
       return`<div class="table-wrap"><table>
-        <thead><tr>${S.isAdmin?'<th>Staff</th>':''}<th>Client</th><th>Product</th><th>Plan</th><th>Commission</th><th>Recurring</th><th>Date</th><th></th></tr></thead>
+        <thead><tr>${S.isAdmin?'<th>Staff</th>':''}<th>Client</th><th>Product</th><th>Plan</th><th>Initial commission</th><th>Status / Residual</th><th>Date</th><th></th></tr></thead>
         <tbody>
         ${nonLinka.slice().reverse().map(sg=>{
-          const prodRates=sg.product==='AIAURA'?null:COMM_RATES[sg.product]?.plans?.[sg.plan];
-          const recAmt=sg.recurringActive?`£${((prodRates?.price||0)*(sg.recurringPct/100)).toFixed(2)}/mo`:'Not started';
-          return`<tr>
+          const isCancelled=sg.clientCancelled;
+          const isAIAURAsg=sg.product==='AIAURA';
+          const aiPlanData=isAIAURAsg?getAIAURARate(sg.staff)?.plans?.[sg.plan]:null;
+          const initialMonths=aiPlanData?(aiPlanData.isACV?12:aiPlanData.commMonths):0;
+          const residualStartMonth=initialMonths+1;
+          const prodRates=isAIAURAsg?null:COMM_RATES[sg.product]?.plans?.[sg.plan];
+          const monthlyResidual=isAIAURAsg?(aiPlanData?.price||0)*(0.05):((prodRates?.price||0)*(sg.recurringPct/100));
+          const residualMonthsIn=sg.recurringMonthsPaid||0;
+
+          return`<tr style="${isCancelled?'opacity:0.5':''}">
             ${S.isAdmin?`<td style="font-weight:500">${sg.staff}</td>`:''}
-            <td><div style="font-size:13px;font-weight:500">${sg.company||sg.contactName||'—'}</div></td>
+            <td><div style="font-size:13px;font-weight:500;${isCancelled?'text-decoration:line-through;color:var(--text-muted)':''}">${sg.company||sg.contactName||'—'}</div>${isCancelled?`<div style="font-size:10px;color:#ff7675">Client cancelled — commission stopped</div>`:''}</td>
             <td><span class="ptag pt-${PK[sg.product]||'aiaura'}">${sg.product}</span></td>
             <td style="font-size:12px">${sg.plan||'—'}</td>
-            <td style="color:#3bbfad;font-weight:600">£${sg.signupBonus}</td>
             <td>
-              <div style="font-size:12px;color:${sg.recurringActive?'#3bbfad':'var(--text-muted)'}">${sg.product==='AIAURA'?`5% residual${sg.recurringActive?' active':''}`:recAmt}</div>
-              ${!sg.recurringActive?`<button class="demo-action-btn done-btn" style="font-size:10px;margin-top:4px" data-startrecurring="${sg.id}">Start recurring</button>`:`<div style="font-size:10px;color:var(--text-muted)">Month ${sg.recurringMonthsPaid||0}/12</div>`}
+              <div style="color:${isCancelled?'var(--text-muted)':'#3bbfad'};font-weight:600">£${sg.signupBonus}</div>
+              ${isAIAURAsg?`<div style="font-size:10px;color:var(--text-muted)">Paid quarterly over ${initialMonths} months</div>`:''}
+            </td>
+            <td>
+              ${isCancelled?`<div style="font-size:11px;color:#ff7675">Cancelled</div>`:`
+              ${isAIAURAsg?`
+                ${sg.recurringActive?`
+                  <div style="font-size:12px;color:#3bbfad;font-weight:500">5% residual active</div>
+                  <div style="font-size:11px;color:var(--text-muted)">£${monthlyResidual.toFixed(2)}/mo — month ${residualMonthsIn} of 12</div>
+                  <button class="demo-action-btn done-btn" style="font-size:10px;margin-top:4px" data-addresidualmonth="${sg.id}">+ Log this month</button>
+                `:`
+                  <div style="font-size:11px;color:var(--text-muted)">Initial period: ${initialMonths} months</div>
+                  <div style="font-size:10px;color:var(--text-muted)">5% residual starts month ${residualStartMonth}</div>
+                  ${S.isAdmin?`<button class="demo-action-btn done-btn" style="font-size:10px;margin-top:4px" data-startrecurring="${sg.id}">Start residual</button>`:''}`
+                }
+              `:`
+                ${sg.recurringActive?`
+                  <div style="font-size:12px;color:#3bbfad">£${monthlyResidual.toFixed(2)}/mo</div>
+                  <div style="font-size:10px;color:var(--text-muted)">Month ${residualMonthsIn}/12</div>
+                `:`
+                  <div style="font-size:11px;color:var(--text-muted)">Residual not started</div>
+                  <button class="demo-action-btn done-btn" style="font-size:10px;margin-top:4px" data-startrecurring="${sg.id}">Start residual</button>
+                `}
+              `}
+              ${S.isAdmin&&!isCancelled?`<button class="demo-action-btn" style="font-size:10px;margin-top:6px;border-color:rgba(255,118,117,0.4);color:#ff7675" data-cancelclient="${sg.id}">Mark cancelled</button>`:''}`}
             </td>
             <td style="color:var(--text-muted);font-size:12px">${sg.date}</td>
             <td><button class="icon-btn danger" data-delsg="${sg.id}">×</button></td>
@@ -1484,10 +1515,10 @@ function signupModal(){
     <div style="background:rgba(59,191,173,0.08);border:1px solid rgba(59,191,173,0.25);border-radius:8px;padding:12px 14px;margin-bottom:1rem">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Commission breakdown</div>
       ${isLinka?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">10% of £${linkaUsage.toFixed(2)} usage = £${bonus.toFixed(2)}</div><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Accelerator tiers: 12% at £3k+ / 15% at £5k+ monthly revenue</div>`:''}
-      ${isAIAURA&&planData?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${planData.commPct}% × ${planData.isACV?'12 months ACV':planData.commMonths+' months MRR'} = £${bonus.toFixed(2)}</div>`:''}
+      ${isAIAURA&&planData?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${planData.commPct}% × ${planData.isACV?'12 months ACV':planData.commMonths+' months MRR'} = £${bonus.toFixed(2)} <span style="color:var(--text-muted)">(paid quarterly)</span></div><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Then 5% monthly residual from month ${planData.isACV?13:planData.commMonths+1}</div>`:''}
       ${addonTotal>0?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">Add-ons: +£${addonTotal}</div>`:''}
       <div style="font-size:22px;font-weight:600;color:#3bbfad">£${totalBonus.toFixed(2)}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${isLinka?'+ 10% of each month\'s usage for 12 months':'+ '+residualPct+'% residual from month 2 (paid quarterly, up to 12 months)'}</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${isLinka?'+ 10% of each month\'s usage for 12 months':prod==='Firelynx'?'One-off payment — no recurring commission':isAIAURA?'+ '+residualPct+'% residual after initial period (paid quarterly, up to 12 months)':'+ '+residualPct+'% recurring from month 2 (paid monthly, up to 12 months)'}</div>
     </div>
     <div class="form-field"><label class="form-label">Date activated</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
     <div class="modal-actions"><button class="btn-cancel" id="sgcm">Cancel</button><button class="btn-save" id="sgsv">Log sign-up</button></div>
@@ -1787,6 +1818,15 @@ function bind(){
     S._signupStaff=existing?.staff||S.user;
     S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';
     S._linkaClientName=clientName;r();});
+  document.querySelectorAll('[data-cancelclient]').forEach(b=>b.onclick=async()=>{
+    if(!confirm('Mark this client as cancelled? Commission will stop from this point.'))return;
+    await dbPatch('tracker_signups',b.dataset.cancelclient,{client_cancelled:true,recurring_active:false});
+    await loadAll();});
+  document.querySelectorAll('[data-addresidualmonth]').forEach(b=>b.onclick=async()=>{
+    const sg=S.signups.find(x=>x.id===b.dataset.addresidualmonth);if(!sg)return;
+    const newMonth=(sg.recurringMonthsPaid||0)+1;
+    await dbPatch('tracker_signups',sg.id,{recurring_months_paid:newMonth,recurring_active:newMonth<12});
+    await loadAll();});
   document.querySelectorAll('[data-startrecurring]').forEach(b=>b.onclick=async()=>{
     await dbPatch('tracker_signups',b.dataset.startrecurring,{recurring_active:true,recurring_start_date:new Date().toISOString().slice(0,10)});
     await loadAll();});
