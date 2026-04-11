@@ -526,7 +526,8 @@ let S={
   upsellPrefillLeadId:null,upsellSelectedLeadId:null,
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
-  leads:[],upsells:[],signups:[],bonuses:[]
+  leads:[],upsells:[],signups:[],bonuses:[],
+  _signupChkErr:''
 };
 
 
@@ -1520,7 +1521,35 @@ function signupModal(){
       <div style="font-size:22px;font-weight:600;color:#3bbfad">£${totalBonus.toFixed(2)}</div>
       ${!isAIAURA?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">${isLinka?'+ 10% of each month\'s usage for 12 months':prod==='Firelynx'?'One-off payment — no recurring commission':'+ '+residualPct+'% recurring from month 2 (paid monthly, up to 12 months)'}</div>`:''}
     </div>
-    <div class="form-field"><label class="form-label">Date activated</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
+
+    <!-- CHECKLIST -->
+    <div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:1rem">
+      <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:12px">Before logging — confirm all complete</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${isLinka?`
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-primary)">
+          <input type="checkbox" id="chk1" style="accent-color:#3bbfad;width:16px;height:16px"/>
+          Direct Debit set up
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-primary)">
+          <input type="checkbox" id="chk2" style="accent-color:#3bbfad;width:16px;height:16px"/>
+          Agreement signed
+        </label>
+        `:`
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-primary)">
+          <input type="checkbox" id="chk1" style="accent-color:#3bbfad;width:16px;height:16px"/>
+          First payment received
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:var(--text-primary)">
+          <input type="checkbox" id="chk2" style="accent-color:#3bbfad;width:16px;height:16px"/>
+          Agreement signed
+        </label>
+        `}
+      </div>
+      ${S._signupChkErr?`<p style="font-size:12px;color:#f09595;margin-top:10px">${S._signupChkErr}</p>`:''}
+    </div>
+
+    <div class="form-field"><label class="form-label">Client onboarding start date</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
     <div class="modal-actions"><button class="btn-cancel" id="sgcm">Cancel</button><button class="btn-save" id="sgsv">Log sign-up</button></div>
   </div></div>`;}
 
@@ -1739,8 +1768,8 @@ function bind(){
     const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
     const defaultProd=defaultStaff==='Ramsey'?'Firelynx':'PRODICTA';
     const defaultPlan=Object.keys(COMM_RATES[defaultProd]?.plans||{})[0]||'';
-    S.showSignupModal=true;S.signupLeadId=null;S._signupProd=defaultProd;S._signupPlan=defaultPlan;S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';S._signupStaff=defaultStaff;r();};
-  const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;S._signupAddons=[];r();};
+    S.showSignupModal=true;S.signupLeadId=null;S._signupProd=defaultProd;S._signupPlan=defaultPlan;S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';S._signupStaff=defaultStaff;S._signupChkErr='';r();};
+  const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;S._signupAddons=[];S._signupChkErr='';r();};
   // Staff change — reload plans for AIAURA
   const sgstaff=document.getElementById('sgstaff');
   if(sgstaff)sgstaff.onchange=()=>{
@@ -1769,6 +1798,16 @@ function bind(){
     const n=parseInt(sgac.value)||0;S._signupAddons=Array(n).fill('addon');r();};
   const sgsv=document.getElementById('sgsv');
   if(sgsv)sgsv.onclick=async()=>{
+    // Validate checklist
+    const chk1=document.getElementById('chk1');
+    const chk2=document.getElementById('chk2');
+    if(!chk1?.checked||!chk2?.checked){
+      const prod2=document.getElementById('sgprod')?.value||'';
+      const isLinka2=prod2==='Linka';
+      S._signupChkErr=isLinka2?'Please confirm DD is set up and agreement is signed.':'Please confirm first payment received and agreement is signed.';
+      r();return;
+    }
+    S._signupChkErr='';
     const l=S.signupLeadId?S.leads.find(x=>x.id===S.signupLeadId):null;
     const staff=S.isAdmin?(document.getElementById('sgstaff')?.value||S.user):S.user;
     const prod=document.getElementById('sgprod').value;
