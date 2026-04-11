@@ -339,15 +339,54 @@ const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
 // Commission rates per product — add others when rates confirmed
 const COMM_RATES={
   PRODICTA:{
-    plans:{Founding:{price:79,signup:30},Starter:{price:49,signup:30},Professional:{price:120,signup:40},Unlimited:{price:159,signup:50}},
+    plans:{
+      Founding:{price:79,signup:30,tier:'flat'},
+      Starter:{price:49,signup:30,tier:'flat'},
+      Professional:{price:120,signup:40,tier:'flat'},
+      Unlimited:{price:159,signup:50,tier:'flat'}
+    },
     recurringPct:5,
     recurringMonths:12,
-    upsellBonus:40
+    upsellBonus:40,
+    commType:'flat'
   },
-  Linka:{plans:null}, // TBC
-  AIAURA:{plans:null}, // TBC
-  Firelynx:{plans:null} // TBC
+  AIAURA:{
+    // Ricky only — 25%×3mo for Starter/Essential, 25%×6mo for Pro/Pro+/Advanced, 15%×12mo ACV for Enterprise
+    plans:{
+      Starter:{price:120,commPct:25,commMonths:3,tier:'starter'},
+      Essential:{price:249,commPct:25,commMonths:3,tier:'starter'},
+      Pro:{price:499,commPct:25,commMonths:6,tier:'growth'},
+      'Pro+':{price:699,commPct:25,commMonths:6,tier:'growth'},
+      Advanced:{price:899,commPct:25,commMonths:6,tier:'growth'},
+      Enterprise:{price:4000,commPct:15,commMonths:12,tier:'enterprise'}
+    },
+    addons:{
+      'Branded Candidate Portal':15,
+      'Extra ATS Integration':10,
+      'Additional Job Posting':5
+    },
+    residualPct:5,
+    residualMonths:12,
+    residualPaidQuarterly:true,
+    accelerators:{
+      deals5Month:{threshold:5,boostPct:10},
+      mrr3k:{threshold:3000,boostPct:10},
+      enterprise3Quarter:{threshold:3,bonus:1000},
+      annualTopRep:{bonus:3000}
+    },
+    commType:'mrr',
+    rickyOnly:true
+  },
+  Linka:{plans:null},
+  Firelynx:{plans:null}
 };
+
+// Calculate AIAURA commission for a given plan
+function calcAIAURAComm(plan,customPrice){
+  const p=COMM_RATES.AIAURA.plans[plan];if(!p)return 0;
+  const price=customPrice||p.price;
+  return Math.round(price*(p.commPct/100)*p.commMonths*100)/100;
+}
 
 // Team bonus thresholds
 const TOP_PERFORMER_BONUS=200;
@@ -475,11 +514,12 @@ function isTomorrow(dtStr){
 
 function buildAlerts(){
   const alerts=[];
-  // Reschedule alerts — only for Ricky and Jessie
+  // Reschedule + accelerator alerts
   if(S.user==='Ricky'||S.user==='Katherine'||S.isAdmin){
     (S.rescheduleAlerts||[]).forEach(ra=>{
       if(!S.dismissedAlerts[ra.key]){
-        alerts.push({key:ra.key,type:'overdue',icon:'🔄',title:`Demo rescheduled — ${ra.company}`,sub:`${ra.staff} rescheduled to ${fmtDt(ra.newDt)}`,leadId:ra.leadId});
+        if(ra.isAccelerator&&!S.isAdmin)return; // accelerator flags admin only
+        alerts.push({key:ra.key,type:ra.isAccelerator?'demo-contact':'overdue',icon:ra.isAccelerator?'🚀':'🔄',title:ra.isAccelerator?ra.msg:`Demo rescheduled — ${ra.company}`,sub:ra.isAccelerator?'AIAURA accelerator — check commission boost':`${ra.staff} rescheduled to ${fmtDt(ra.newDt)}`,leadId:ra.leadId});
       }
     });
   }
@@ -1283,9 +1323,24 @@ function commissionTab(){
 function signupModal(){
   const l=S.signupLeadId?S.leads.find(x=>x.id===S.signupLeadId):null;
   const prod=S._signupProd||'PRODICTA';
-  const prodRates=COMM_RATES[prod]?.plans;
-  const plan=S._signupPlan||(prodRates?Object.keys(prodRates)[0]:'');
-  const bonus=prodRates&&plan?prodRates[plan]?.signup||0:0;
+  const rates=COMM_RATES[prod];
+  const prodPlans=rates?.plans;
+  const plan=S._signupPlan||(prodPlans?Object.keys(prodPlans)[0]:'');
+  const isAIAURA=prod==='AIAURA';
+  const customPrice=S._signupCustomPrice||'';
+
+  let bonus=0;
+  if(isAIAURA&&prodPlans&&plan){
+    const px=customPrice?parseFloat(customPrice):prodPlans[plan]?.price||0;
+    bonus=calcAIAURAComm(plan,px);
+  } else if(prodPlans&&plan){
+    bonus=prodPlans[plan]?.signup||0;
+  }
+
+  const selectedAddons=S._signupAddons||[];
+  const addonTotal=selectedAddons.reduce((a,k)=>a+(rates?.addons?.[k]||0),0);
+  const totalBonus=bonus+addonTotal;
+
   return`<div class="modal-overlay"><div class="modal">
     <h3>Log sign-up & commission</h3>
     ${l?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem;font-weight:500">${l.company||l.contactName||'Client'}</div>`:''}
@@ -1293,13 +1348,20 @@ function signupModal(){
     <div class="form-field"><label class="form-label">Product signed up to</label><select id="sgprod">
       ${PRODUCTS.map(p=>`<option ${p===prod?'selected':''}>${p}</option>`).join('')}
     </select></div>
-    ${prodRates?`<div class="form-field"><label class="form-label">Plan</label><select id="sgplan">
-      ${Object.entries(prodRates).map(([p,v])=>`<option value="${p}" ${p===plan?'selected':''}>${p} — £${v.price}/mo — £${v.signup} bonus</option>`).join('')}
+    ${prodPlans?`<div class="form-field"><label class="form-label">Plan</label><select id="sgplan">
+      ${Object.entries(prodPlans).map(([p,v])=>`<option value="${p}" ${p===plan?'selected':''}>${p}${v.price?' — £'+v.price+'/mo':''}</option>`).join('')}
     </select></div>`:`<div class="form-field"><label class="form-label">Plan</label><input type="text" id="sgplan" placeholder="Plan name"/></div>`}
+    ${isAIAURA&&prodPlans&&plan&&prodPlans[plan]?.tier==='enterprise'?`<div class="form-field"><label class="form-label">Custom monthly price (£) <span style="color:var(--text-muted);font-size:10px">— Enterprise pricing varies</span></label><input type="text" id="sgcustomprice" placeholder="e.g. 4000" value="${customPrice}"/></div>`:''}
+    ${isAIAURA&&rates?.addons?`<div class="form-field"><label class="form-label">Add-ons sold <span style="color:var(--text-muted);font-size:10px">(optional)</span></label>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${Object.entries(rates.addons).map(([name,amt])=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-primary)"><input type="checkbox" class="sgaddon" data-addon="${name}" ${selectedAddons.includes(name)?'checked':''} style="accent-color:#3bbfad;width:14px;height:14px"/> ${name} <span style="color:#3bbfad">+£${amt}</span></label>`).join('')}
+      </div></div>`:''}
     <div style="background:rgba(59,191,173,0.08);border:1px solid rgba(59,191,173,0.25);border-radius:8px;padding:12px 14px;margin-bottom:1rem">
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Sign-up bonus</div>
-      <div style="font-size:20px;font-weight:600;color:#3bbfad" id="sgbonus">£${bonus}</div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Recurring: ${COMM_RATES[prod]?.recurringPct||'TBC'}% from month 2</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">${isAIAURA?`Commission breakdown`:'Sign-up bonus'}</div>
+      ${isAIAURA&&prodPlans&&plan?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">${prodPlans[plan]?.commPct||0}% × ${prodPlans[plan]?.commMonths||0} months = £${bonus.toFixed(2)}</div>`:''}
+      ${addonTotal>0?`<div style="font-size:12px;color:var(--text-secondary);margin-bottom:4px">Add-ons: +£${addonTotal}</div>`:''}
+      <div style="font-size:22px;font-weight:600;color:#3bbfad">£${totalBonus.toFixed(2)}</div>
+      ${isAIAURA?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ 5% residual from month 2 (paid quarterly, up to 12 months)</div>`:`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">+ ${rates?.recurringPct||0}% recurring from month 2</div>`}
     </div>
     <div class="form-field"><label class="form-label">Date signed up</label><input type="date" id="sgdate" value="${new Date().toISOString().slice(0,10)}"/></div>
     <div class="modal-actions"><button class="btn-cancel" id="sgcm">Cancel</button><button class="btn-save" id="sgsv">Log sign-up</button></div>
@@ -1490,7 +1552,12 @@ function bind(){
     await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Status changed: ${old} → ${newStatus}`});
     if(newStatus==='Demo booked'){S.showDemoModal=true;S.demoLeadId=l.id;S.rescheduleId=null;}
     if(newStatus==='Converted'&&COMM_STAFF.includes(l.staff)){
-      S.showSignupModal=true;S.signupLeadId=l.id;S._signupProd='PRODICTA';S._signupPlan='Starter';
+      // Pre-select product based on what was on the lead
+      const leadProd=l.products&&l.products[0]||'PRODICTA';
+      const validProd=COMM_RATES[leadProd]?.plans?leadProd:'PRODICTA';
+      // AIAURA commission is Ricky only
+      if(validProd==='AIAURA'&&l.staff!=='Ricky'){S.showSignupModal=false;}
+      else{S.showSignupModal=true;S.signupLeadId=l.id;S._signupProd=validProd;S._signupPlan=Object.keys(COMM_RATES[validProd]?.plans||{})[0]||'';S._signupAddons=[];S._signupCustomPrice='';}
     }
     await loadAll();});
   document.querySelectorAll('[data-editdemoprods]').forEach(b=>b.onclick=()=>{
@@ -1510,26 +1577,48 @@ function bind(){
   // Commission tab
   document.querySelectorAll('[data-cf]').forEach(f=>f.onclick=()=>{S.commFilter=f.dataset.cf;r();});
   const ologsignup=document.getElementById('ologsignup');
-  if(ologsignup)ologsignup.onclick=()=>{S.showSignupModal=true;S.signupLeadId=null;S._signupProd='PRODICTA';S._signupPlan='Starter';r();};
-  const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;r();};
-  // Live bonus preview when product/plan changes
+  if(ologsignup)ologsignup.onclick=()=>{S.showSignupModal=true;S.signupLeadId=null;S._signupProd='PRODICTA';S._signupPlan='Starter';S._signupAddons=[];S._signupCustomPrice='';r();};
+  const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;S._signupAddons=[];r();};
   const sgprod=document.getElementById('sgprod');
-  if(sgprod)sgprod.onchange=()=>{S._signupProd=sgprod.value;S._signupPlan=Object.keys(COMM_RATES[sgprod.value]?.plans||{})[0]||'';r();};
+  if(sgprod)sgprod.onchange=()=>{S._signupProd=sgprod.value;S._signupAddons=[];S._signupCustomPrice='';const firstPlan=Object.keys(COMM_RATES[sgprod.value]?.plans||{})[0]||'';S._signupPlan=firstPlan;r();};
   const sgplan=document.getElementById('sgplan');
-  if(sgplan)sgplan.onchange=()=>{S._signupPlan=sgplan.value;r();};
+  if(sgplan&&sgplan.tagName==='SELECT')sgplan.onchange=()=>{S._signupPlan=sgplan.value;r();};
+  const sgcp=document.getElementById('sgcustomprice');
+  if(sgcp)sgcp.oninput=()=>{S._signupCustomPrice=sgcp.value;r();};
+  document.querySelectorAll('.sgaddon').forEach(cb=>cb.onchange=()=>{
+    const name=cb.dataset.addon;
+    S._signupAddons=S._signupAddons||[];
+    if(cb.checked)S._signupAddons=[...S._signupAddons,name];
+    else S._signupAddons=S._signupAddons.filter(x=>x!==name);
+    r();});
   const sgsv=document.getElementById('sgsv');
   if(sgsv)sgsv.onclick=async()=>{
     const l=S.signupLeadId?S.leads.find(x=>x.id===S.signupLeadId):null;
     const staff=S.isAdmin?(document.getElementById('sgstaff')?.value||S.user):S.user;
     const prod=document.getElementById('sgprod').value;
-    const plan=document.getElementById('sgplan').value;
-    const rates=COMM_RATES[prod]?.plans;
-    const bonus=rates?rates[plan]?.signup||0:0;
-    const recurringPct=COMM_RATES[prod]?.recurringPct||0;
-    const payload={staff,lead_id:l?l.id:null,company:l?l.company||l.contactName:'',contact_name:l?l.contactName:'',product:prod,plan,signup_bonus:bonus,recurring_pct:recurringPct,recurring_active:false,recurring_months_paid:0,date:document.getElementById('sgdate').value};
+    const planEl=document.getElementById('sgplan');
+    const plan=planEl?planEl.value:'';
+    const rates=COMM_RATES[prod];
+    const prodPlans=rates?.plans;
+    const isAIAURA=prod==='AIAURA';
+    const customPrice=document.getElementById('sgcustomprice')?.value||'';
+    let bonus=0;
+    if(isAIAURA&&prodPlans&&plan){bonus=calcAIAURAComm(plan,customPrice?parseFloat(customPrice):null);}
+    else if(prodPlans&&plan){bonus=prodPlans[plan]?.signup||0;}
+    const selectedAddons=S._signupAddons||[];
+    const addonTotal=selectedAddons.reduce((a,k)=>a+(rates?.addons?.[k]||0),0);
+    const totalBonus=Math.round((bonus+addonTotal)*100)/100;
+    const recurringPct=isAIAURA?(rates?.residualPct||5):(rates?.recurringPct||0);
+    const payload={staff,lead_id:l?l.id:null,company:l?l.company||l.contactName:'',contact_name:l?l.contactName:'',product:prod,plan,signup_bonus:totalBonus,recurring_pct:recurringPct,recurring_active:false,recurring_months_paid:0,date:document.getElementById('sgdate').value};
     await dbPost('tracker_signups',payload);
-    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Sign-up logged: ${prod} ${plan} — £${bonus} bonus`});
-    S.showSignupModal=false;await loadAll();};
+    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Sign-up logged: ${prod} ${plan} — £${totalBonus} commission${selectedAddons.length?' (+'+selectedAddons.join(', ')+')'':''}`});
+    // Check AIAURA accelerators for Ricky — flag to admin
+    if(prod==='AIAURA'&&staff==='Ricky'&&S.isAdmin){
+      const now2=new Date();const thisMonth2=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
+      const rickyThisMonth=(S.signups||[]).filter(sg=>sg.staff==='Ricky'&&sg.product==='AIAURA'&&(sg.date||'').startsWith(thisMonth2)).length+1;
+      if(rickyThisMonth>=5)S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`acc-deals-${Date.now()}`,company:'Accelerator hit!',newDt:'',staff:'Ricky',leadId:null,isAccelerator:true,msg:`Ricky has closed ${rickyThisMonth} AIAURA deals this month — +10% commission boost applies!`}];
+    }
+    S.showSignupModal=false;S._signupAddons=[];S._signupCustomPrice='';await loadAll();};
   document.querySelectorAll('[data-startrecurring]').forEach(b=>b.onclick=async()=>{
     await dbPatch('tracker_signups',b.dataset.startrecurring,{recurring_active:true,recurring_start_date:new Date().toISOString().slice(0,10)});
     await loadAll();});
