@@ -484,11 +484,11 @@ async function loadAll(){
       date:l.date||new Date().toISOString().slice(0,10),
       notes:(notes||[]).filter(n=>n.lead_id===l.id).map(n=>({ts:n.ts,txt:n.txt,id:n.id})),
       demos:(demos||[]).filter(d=>d.lead_id===l.id).map(d=>({
-        id:d.id,dt:d.dt,note:d.note||'',demoProds:d.demo_prods||[],
+        id:d.id,dt:d.dt?d.dt.slice(0,16):d.dt,note:d.note||'',demoProds:d.demo_prods||[],
         demoNotes:d.demo_notes||[],status:d.status||'upcoming'
       })),
       reminders:(reminders||[]).filter(r=>r.lead_id===l.id).map(r=>({
-        id:r.id,dt:r.dt,txt:r.txt,done:r.done||false
+        id:r.id,dt:r.dt?r.dt.slice(0,16):r.dt,txt:r.txt,done:r.done||false
       }))
     }));
     S.upsells=(upsells||[]).map(u=>({
@@ -497,7 +497,10 @@ async function loadAll(){
       commission:u.commission||0,notes:u.notes||'',date:u.date||''
     }));
     S.busyBlocks=(busy||[]).map(b=>({
-      id:b.id,staff:b.staff,start:b.start_dt,end:b.end_dt,label:b.label||'',type:b.type||'busy'
+      id:b.id,staff:b.staff,
+      start:b.start_dt?b.start_dt.slice(0,16):b.start_dt,
+      end:b.end_dt?b.end_dt.slice(0,16):b.end_dt,
+      label:b.label||'',type:b.type||'busy'
     }));
     S.signups=(signups||[]).map(sg=>({
       id:sg.id,staff:sg.staff,leadId:sg.lead_id,company:sg.company||'',
