@@ -1192,11 +1192,10 @@ function calendarTab(){
   }
 
   function eventStyle(evt){
-    const hourStart=evt.start.getHours()+(evt.start.getMinutes()/60);
-    const clampedStart=Math.max(hourStart,7); // clamp to 7am
-    const top=(clampedStart-7)*48;
-    const height=Math.max(evt.durationMins/60*48-2,20);
-    return`top:${top}px;height:${Math.min(height,(20-clampedStart)*48)}px;`;
+    const mins=evt.start.getMinutes();
+    const top=Math.round((mins/60)*48);
+    const height=Math.max(Math.round(evt.durationMins/60*48)-2,20);
+    return`top:${top}px;height:${height}px;`;
   }
 
   const weekLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
