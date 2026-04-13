@@ -1719,11 +1719,11 @@ function bind(){
     const dt=document.getElementById('ddt').value;const note=document.getElementById('dnote').value.trim();
     if(S.rescheduleId){
       await dbPatch('tracker_demos',S.rescheduleId,{status:'rescheduled'});
-      await dbPost('tracker_demos',{lead_id:l.id,dt:localToUTC(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt,note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo rescheduled to ${fmtDt(dt)}`});
       S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`resch-${Date.now()}`,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id}];
     }else{
-      await dbPost('tracker_demos',{lead_id:l.id,dt:localToUTC(dt),note,demo_prods:l.products,demo_notes:[],status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt,note,demo_prods:l.products,demo_notes:[],status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo booked: ${fmtDt(dt)}`});
     }
     S.showDemoModal=false;S.rescheduleId=null;await loadAll();};
@@ -1744,7 +1744,7 @@ function bind(){
   if(rsv)rsv.onclick=async()=>{
     const l=S.leads.find(x=>x.id===S.reminderLeadId);if(!l)return;
     const dt=document.getElementById('rdt').value;const txt=document.getElementById('rnote').value.trim();if(!txt||!dt)return;
-    await dbPost('tracker_reminders',{lead_id:l.id,dt:localToUTC(dt),txt,done:false});
+    await dbPost('tracker_reminders',{lead_id:l.id,dt,txt,done:false});
     await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Reminder set: ${fmtDt(dt)} — ${txt}`});
     S.showReminderModal=false;await loadAll();};
   document.querySelectorAll('[data-markalldone]').forEach(b=>b.onclick=async()=>{
@@ -1939,7 +1939,7 @@ function bind(){
     const label=document.getElementById('blabel').value.trim()||type;
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
-    await dbPost('tracker_busy_blocks',{staff,start_dt:localToUTC(start),end_dt:localToUTC(end),label,type});
+    await dbPost('tracker_busy_blocks',{staff,start_dt:start,end_dt:end,label,type});
     S.showBusyModal=false;S.busyErr='';await loadAll();};
 
   window.__delBusy=async(id)=>{await dbDelete('tracker_busy_blocks',id);await loadAll();};
