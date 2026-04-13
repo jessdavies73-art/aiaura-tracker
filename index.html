@@ -432,6 +432,18 @@ const TOP_PERFORMER_BONUS=200;
 const TEAM_TARGET_BONUS=50;
 const TEAM_TARGET_COUNT=15;
 
+// Convert local datetime-local string to UTC ISO for Supabase storage
+function localToUTC(localStr){
+  if(!localStr)return localStr;
+  return new Date(localStr).toISOString();
+}
+// Convert UTC ISO from Supabase back to local datetime-local string
+function utcToLocal(utcStr){
+  if(!utcStr)return utcStr;
+  const d=new Date(utcStr);
+  const pad=n=>String(n).padStart(2,'0');
+  return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function nowTs(){const n=new Date();return n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' '+n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function fmtDt(str){if(!str)return'';const d=new Date(str);return d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function daysSince(ds){return Math.floor((new Date()-new Date(ds))/(1000*60*60*24));}
@@ -484,11 +496,11 @@ async function loadAll(){
       date:l.date||new Date().toISOString().slice(0,10),
       notes:(notes||[]).filter(n=>n.lead_id===l.id).map(n=>({ts:n.ts,txt:n.txt,id:n.id})),
       demos:(demos||[]).filter(d=>d.lead_id===l.id).map(d=>({
-        id:d.id,dt:d.dt?d.dt.slice(0,16):d.dt,note:d.note||'',demoProds:d.demo_prods||[],
+        id:d.id,dt:utcToLocal(d.dt),note:d.note||'',demoProds:d.demo_prods||[],
         demoNotes:d.demo_notes||[],status:d.status||'upcoming'
       })),
       reminders:(reminders||[]).filter(r=>r.lead_id===l.id).map(r=>({
-        id:r.id,dt:r.dt?r.dt.slice(0,16):r.dt,txt:r.txt,done:r.done||false
+        id:r.id,dt:utcToLocal(r.dt),txt:r.txt,done:r.done||false
       }))
     }));
     S.upsells=(upsells||[]).map(u=>({
@@ -498,8 +510,8 @@ async function loadAll(){
     }));
     S.busyBlocks=(busy||[]).map(b=>({
       id:b.id,staff:b.staff,
-      start:b.start_dt?b.start_dt.slice(0,16):b.start_dt,
-      end:b.end_dt?b.end_dt.slice(0,16):b.end_dt,
+      start:utcToLocal(b.start_dt),
+      end:utcToLocal(b.end_dt),
       label:b.label||'',type:b.type||'busy'
     }));
     S.signups=(signups||[]).map(sg=>({
@@ -1707,11 +1719,11 @@ function bind(){
     const dt=document.getElementById('ddt').value;const note=document.getElementById('dnote').value.trim();
     if(S.rescheduleId){
       await dbPatch('tracker_demos',S.rescheduleId,{status:'rescheduled'});
-      await dbPost('tracker_demos',{lead_id:l.id,dt,note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt:localToUTC(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo rescheduled to ${fmtDt(dt)}`});
       S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`resch-${Date.now()}`,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id}];
     }else{
-      await dbPost('tracker_demos',{lead_id:l.id,dt,note,demo_prods:l.products,demo_notes:[],status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt:localToUTC(dt),note,demo_prods:l.products,demo_notes:[],status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo booked: ${fmtDt(dt)}`});
     }
     S.showDemoModal=false;S.rescheduleId=null;await loadAll();};
@@ -1732,7 +1744,7 @@ function bind(){
   if(rsv)rsv.onclick=async()=>{
     const l=S.leads.find(x=>x.id===S.reminderLeadId);if(!l)return;
     const dt=document.getElementById('rdt').value;const txt=document.getElementById('rnote').value.trim();if(!txt||!dt)return;
-    await dbPost('tracker_reminders',{lead_id:l.id,dt,txt,done:false});
+    await dbPost('tracker_reminders',{lead_id:l.id,dt:localToUTC(dt),txt,done:false});
     await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Reminder set: ${fmtDt(dt)} — ${txt}`});
     S.showReminderModal=false;await loadAll();};
   document.querySelectorAll('[data-markalldone]').forEach(b=>b.onclick=async()=>{
@@ -1927,7 +1939,7 @@ function bind(){
     const label=document.getElementById('blabel').value.trim()||type;
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
-    await dbPost('tracker_busy_blocks',{staff,start_dt:start,end_dt:end,label,type});
+    await dbPost('tracker_busy_blocks',{staff,start_dt:localToUTC(start),end_dt:localToUTC(end),label,type});
     S.showBusyModal=false;S.busyErr='';await loadAll();};
 
   window.__delBusy=async(id)=>{await dbDelete('tracker_busy_blocks',id);await loadAll();};
