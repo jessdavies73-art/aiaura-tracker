@@ -439,12 +439,13 @@ function saveLocalDt(localStr){
   // d is already local time, toISOString() converts to UTC correctly
   return d.toISOString();
 }
-// Convert UTC ISO from Supabase back to local datetime-local string
+// Convert UTC timestamp from Supabase back to local datetime-local string
 function utcToLocal(utcStr){
   if(!utcStr)return utcStr;
-  // Supabase returns '2026-04-13 09:00:00+00' — normalise to ISO format first
-  const normalised=utcStr.replace(' ','T').replace('+00','+00:00');
-  const d=new Date(normalised);
+  // Supabase returns '2026-04-13 12:42:00+00' — convert to proper ISO
+  const iso=utcStr.toString().replace(' ','T').replace('+00:00','Z').replace('+00','Z');
+  const d=new Date(iso);
+  if(isNaN(d))return utcStr;
   const pad=n=>String(n).padStart(2,'0');
   return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
