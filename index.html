@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1158,24 +1157,25 @@ function calendarTab(){
 
   // Gather all events for this week
   function sameLocalDay(dt,day){
-    return dt.getFullYear()===day.getFullYear()&&dt.getMonth()===day.getMonth()&&dt.getDate()===day.getDate();
+    // Handle both Date objects and strings
+    const d=dt instanceof Date?dt:new Date(dt);
+    if(isNaN(d))return false;
+    return d.getFullYear()===day.getFullYear()&&d.getMonth()===day.getMonth()&&d.getDate()===day.getDate();
   }
 
   function eventsForDay(day){
     const evts=[];
-    // Demos from all leads — use local date comparison
     S.leads.forEach(l=>{
       (l.demos||[]).filter(d=>d.status==='upcoming').forEach(d=>{
-        const dt=new Date(d.dt);
-        if(sameLocalDay(dt,day)){
+        if(sameLocalDay(d.dt,day)){
+          const dt=new Date(d.dt);
           evts.push({type:'demo',start:dt,durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,color:STAFF_COLORS[l.staff]||'#fac775'});
         }
       });
     });
-    // Busy blocks
     S.busyBlocks.forEach(b=>{
-      const bs=new Date(b.start);const be=new Date(b.end);
-      if(sameLocalDay(bs,day)){
+      if(sameLocalDay(b.start,day)){
+        const bs=new Date(b.start);const be=new Date(b.end);
         evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:`${b.staff}: ${b.label}`,staff:b.staff,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
       }
     });
