@@ -332,6 +332,7 @@ const STAFF=['Ricky','Katherine','Ramsey'];
 const COMM_STAFF=['Ricky','Katherine','Ramsey']; // all three earn Firelynx commission
 const PRODICTA_AIAURA_STAFF=['Ricky','Katherine']; // only these two for PRODICTA/AIAURA/Linka
 const PIN='8876';
+const STAFF_PINS={Ricky:'2675',Katherine:'9247',Ramsey:'1908'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
 const PK={Linka:'linka',AIAURA:'aiaura',PRODICTA:'prodicta',Firelynx:'firelynx'};
 const STATUSES=['Contacted','Demo booked','Converted','Lost'];
@@ -517,7 +518,7 @@ async function loadAll(){
 // ── STATE ───────────────────────────────────────────────────────────────────
 let S={
   loggedIn:false,isAdmin:false,user:null,loading:false,
-  loginStep:'choose',loginErr:'',
+  loginStep:'choose',loginErr:'',_pendingUser:'',
   tab:'alerts',filter:'All',upsellFilter:'All',commFilter:'All',qv:null,
   calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',
   showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,
@@ -611,11 +612,20 @@ function loginHtml(){
       ${STAFF.map(n=>`<button class="staff-btn" data-n="${n}"><div class="avatar">${n[0]}</div>${n}</button>`).join('')}
       <button class="staff-btn dir" data-n="__admin__"><div class="avatar">J</div>Jessie &nbsp;·&nbsp; Director</button>
     </div></div>`;
+  if(S.loginStep==='staffpin') return`
+    <div class="login-page"><div class="login-card">
+      <div class="login-logo"><div class="brand">AIAURA</div><div class="tagline">${S._pendingUser}</div></div>
+      <p class="login-prompt">Enter your PIN to continue</p>
+      <input class="pin-input" type="password" id="pin" placeholder="····" maxlength="4" autofocus/>
+      ${S.loginErr?`<p class="err-msg">${S.loginErr}</p>`:''}
+      <button class="btn-primary" id="pgo">Continue</button>
+      <span class="back-link" id="bk">← Back</span>
+    </div></div>`;
   return`
     <div class="login-page"><div class="login-card">
       <div class="login-logo"><div class="brand">AIAURA</div><div class="tagline">Director access</div></div>
       <p class="login-prompt">Enter your PIN to continue</p>
-      <input class="pin-input" type="password" id="pin" placeholder="····" maxlength="4"/>
+      <input class="pin-input" type="password" id="pin" placeholder="····" maxlength="4" autofocus/>
       ${S.loginErr?`<p class="err-msg">${S.loginErr}</p>`:''}
       <button class="btn-primary" id="pgo">Continue</button>
       <span class="back-link" id="bk">← Back</span>
@@ -1627,13 +1637,21 @@ function bind(){
   document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{
     const n=b.dataset.n;
     if(n==='__admin__'){S.loginStep='pin';S.loginErr='';r();}
-    else{S.loggedIn=true;S.isAdmin=false;S.user=n;loadAll();}
+    else{S.loginStep='staffpin';S._pendingUser=n;S.loginErr='';r();}
   });
   const pg=document.getElementById('pgo');
   if(pg)pg.onclick=()=>{
-    if(document.getElementById('pin').value===PIN){S.loggedIn=true;S.isAdmin=true;S.user='Jessie';loadAll();}
-    else{S.loginErr='Incorrect PIN — try again.';r();}
-  };  const pi=document.getElementById('pin');if(pi)pi.onkeydown=e=>{if(e.key==='Enter')pg.onclick();};
+    const val=document.getElementById('pin').value;
+    if(S.loginStep==='staffpin'){
+      if(val===STAFF_PINS[S._pendingUser]){S.loggedIn=true;S.isAdmin=false;S.user=S._pendingUser;loadAll();}
+      else{S.loginErr='Incorrect PIN — try again.';r();}
+    } else {
+      if(val===PIN){S.loggedIn=true;S.isAdmin=true;S.user='Jessie';loadAll();}
+      else{S.loginErr='Incorrect PIN — try again.';r();}
+    }
+  };
+  // Allow Enter key on PIN input
+  const pi=document.getElementById('pin');if(pi)pi.onkeydown=(e)=>{if(e.key==='Enter')pg?.click();};
   const bk=document.getElementById('bk');if(bk)bk.onclick=()=>{S.loginStep='choose';r();};
   const lo=document.getElementById('lo');if(lo)lo.onclick=()=>{S.loggedIn=false;S.loginStep='choose';S.isAdmin=false;S.user=null;r();};
   const om=document.getElementById('om');if(om)om.onclick=()=>{S.showModal=true;S.editId=null;S.mProds=[];S.mErr='';S._mSnap={};r()};
