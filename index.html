@@ -1167,25 +1167,24 @@ function calendarTab(){
 
   // Gather all events for this week
   function sameLocalDay(dt,day){
-    // Handle both Date objects and strings
     const d=dt instanceof Date?dt:new Date(dt);
     if(isNaN(d))return false;
-    return d.getFullYear()===day.getFullYear()&&d.getMonth()===day.getMonth()&&d.getDate()===day.getDate();
+    return d.toDateString()===day.toDateString();
   }
 
   function eventsForDay(day){
     const evts=[];
     S.leads.forEach(l=>{
       (l.demos||[]).filter(d=>d.status==='upcoming').forEach(d=>{
-        if(sameLocalDay(d.dt,day)){
-          const dt=new Date(d.dt);
-          evts.push({type:'demo',start:dt,durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,color:STAFF_COLORS[l.staff]||'#fac775'});
+        if(sameLocalDay(new Date(d.dt),day)){
+          evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,color:STAFF_COLORS[l.staff]||'#fac775'});
         }
       });
     });
     S.busyBlocks.forEach(b=>{
-      if(sameLocalDay(b.start,day)){
-        const bs=new Date(b.start);const be=new Date(b.end);
+      const bs=new Date(b.start);
+      if(sameLocalDay(bs,day)){
+        const be=new Date(b.end);
         evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:`${b.staff}: ${b.label}`,staff:b.staff,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
       }
     });
@@ -1221,10 +1220,7 @@ function calendarTab(){
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(255,118,117,0.15);border-left:3px solid #ff7675"></div>Busy</div>
       </div>
     </div>
-    <div style="background:rgba(255,0,0,0.1);border:1px solid red;padding:10px;margin-bottom:10px;font-size:11px;color:#fff;border-radius:8px">
-      <div>BusyBlocks count: ${S.busyBlocks.length}</div>
-      ${S.busyBlocks.map(b=>`<div>${b.staff}: ${b.start} → ${b.end} | new Date: ${new Date(b.start).toString().slice(0,24)}</div>`).join('')}
-    </div>
+    <div style="overflow-x:auto">
     <div class="cal-grid" style="min-width:620px">
       <div class="cal-time-gutter cal-col-header" style="border-bottom:1px solid var(--border)"></div>
       ${days.map((d,i)=>{
