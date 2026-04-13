@@ -434,8 +434,18 @@ const TEAM_TARGET_COUNT=15;
 
 // Store datetime-local value as-is — no timezone conversion
 function saveLocalDt(localStr){return localStr||'';}
-// Read datetime string as-is — no timezone conversion
-function utcToLocal(str){if(!str)return str;return str.toString().slice(0,16);}
+// Read datetime string — handle both plain text and UTC timestamps
+function utcToLocal(str){
+  if(!str)return str;
+  const s=str.toString();
+  // If it's already a plain datetime-local string (no timezone), return as-is
+  if(s.length<=16)return s;
+  // If it has timezone info, parse and convert to local
+  const d=new Date(s.replace(' ','T'));
+  if(isNaN(d))return s.slice(0,16);
+  const pad=n=>String(n).padStart(2,'0');
+  return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function nowTs(){const n=new Date();return n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' '+n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function fmtDt(str){if(!str)return'';const d=new Date(str);return d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function daysSince(ds){return Math.floor((new Date()-new Date(ds))/(1000*60*60*24));}
