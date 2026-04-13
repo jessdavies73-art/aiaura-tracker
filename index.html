@@ -1221,7 +1221,10 @@ function calendarTab(){
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(255,118,117,0.15);border-left:3px solid #ff7675"></div>Busy</div>
       </div>
     </div>
-    <div style="overflow-x:auto">
+    <div style="background:rgba(255,0,0,0.1);border:1px solid red;padding:10px;margin-bottom:10px;font-size:11px;color:#fff;border-radius:8px">
+      <div>BusyBlocks count: ${S.busyBlocks.length}</div>
+      ${S.busyBlocks.map(b=>`<div>${b.staff}: ${b.start} → ${b.end} | new Date: ${new Date(b.start).toString().slice(0,24)}</div>`).join('')}
+    </div>
     <div class="cal-grid" style="min-width:620px">
       <div class="cal-time-gutter cal-col-header" style="border-bottom:1px solid var(--border)"></div>
       ${days.map((d,i)=>{
