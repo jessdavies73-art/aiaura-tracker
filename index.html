@@ -440,7 +440,9 @@ function localToUTC(localStr){
 // Convert UTC ISO from Supabase back to local datetime-local string
 function utcToLocal(utcStr){
   if(!utcStr)return utcStr;
-  const d=new Date(utcStr);
+  // Supabase returns '2026-04-13 09:00:00+00' — normalise to ISO format first
+  const normalised=utcStr.replace(' ','T').replace('+00','+00:00');
+  const d=new Date(normalised);
   const pad=n=>String(n).padStart(2,'0');
   return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
