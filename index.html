@@ -432,23 +432,10 @@ const TOP_PERFORMER_BONUS=200;
 const TEAM_TARGET_BONUS=50;
 const TEAM_TARGET_COUNT=15;
 
-// Save datetime-local value to Supabase — subtract local timezone offset so Supabase stores correct UTC
-function saveLocalDt(localStr){
-  if(!localStr)return localStr;
-  const d=new Date(localStr);
-  // d is already local time, toISOString() converts to UTC correctly
-  return d.toISOString();
-}
-// Convert UTC timestamp from Supabase back to local datetime-local string
-function utcToLocal(utcStr){
-  if(!utcStr)return utcStr;
-  // Supabase returns '2026-04-13 12:42:00+00' — convert to proper ISO
-  const iso=utcStr.toString().replace(' ','T').replace('+00:00','Z').replace('+00','Z');
-  const d=new Date(iso);
-  if(isNaN(d))return utcStr;
-  const pad=n=>String(n).padStart(2,'0');
-  return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+// Store datetime-local value as-is — no timezone conversion
+function saveLocalDt(localStr){return localStr||'';}
+// Read datetime string as-is — no timezone conversion
+function utcToLocal(str){if(!str)return str;return str.toString().slice(0,16);}
 function nowTs(){const n=new Date();return n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})+' '+n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function fmtDt(str){if(!str)return'';const d=new Date(str);return d.toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' at '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 function daysSince(ds){return Math.floor((new Date()-new Date(ds))/(1000*60*60*24));}
