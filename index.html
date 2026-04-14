@@ -1772,8 +1772,8 @@ function bind(){
     const old=l.status;
     await dbPatch('tracker_leads',l.id,{status:newStatus});
     await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Status changed: ${old} → ${newStatus}`});
-    let openSignup=false,signupLeadId=null,signupProd='',signupPlan='',signupStaff='';
-    if(newStatus==='Demo booked'){S.showDemoModal=true;S.demoLeadId=l.id;S.rescheduleId=null;}
+    let openDemo=false,openSignup=false,signupLeadId=null,signupProd='',signupPlan='',signupStaff='';
+    if(newStatus==='Demo booked'){openDemo=true;}
     if(newStatus==='Converted'&&COMM_STAFF.includes(l.staff)){
       const leadProd=l.products&&l.products[0]||'PRODICTA';
       const validProd=l.staff==='Ramsey'?'Firelynx':((['PRODICTA','AIAURA','Linka'].includes(leadProd)&&PRODICTA_AIAURA_STAFF.includes(l.staff))||leadProd==='Firelynx')?leadProd:'PRODICTA';
@@ -1783,6 +1783,7 @@ function bind(){
       openSignup=true;signupLeadId=l.id;signupProd=validProd;signupPlan=firstPlan;signupStaff=l.staff;
     }
     await loadAll();
+    if(openDemo){S.showDemoModal=true;S.demoLeadId=l.id;S.rescheduleId=null;r();}
     if(openSignup){
       S.showSignupModal=true;S.signupLeadId=signupLeadId;S._signupProd=signupProd;
       S._signupPlan=signupPlan;S._signupAddons=[];S._signupCustomPrice='';
