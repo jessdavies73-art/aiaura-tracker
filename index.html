@@ -548,7 +548,7 @@ let S={
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
   leads:[],upsells:[],signups:[],bonuses:[],
-  _signupChkErr:''
+  _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{}
 };
 
 
@@ -782,10 +782,11 @@ function appHtml(){
         <button class="tab-btn ${S.tab==='upsells'?'active':''}" data-tab="upsells">Upsells <span style="font-size:11px;background:rgba(59,191,173,0.15);color:#3bbfad;border-radius:10px;padding:1px 7px;margin-left:4px">${mu.length}</span></button>
         ${(S.isAdmin||COMM_STAFF.includes(S.user))?`<button class="tab-btn ${S.tab==='commission'?'active':''}" data-tab="commission">💰 Commission</button>`:''}
         <button class="tab-btn ${S.tab==='calendar'?'active':''}" data-tab="calendar">📅 Calendar</button>
+        <button class="tab-btn ${S.tab==='objections'?'active':''}" data-tab="objections">💬 Objections</button>
         ${S.isAdmin?`<button class="tab-btn ${S.tab==='lb'?'active':''}" data-tab="lb">Leaderboard</button>`:''}
       </div>
 
-      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():lbTab(sm,mx)}
+      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='objections'?objectionsTab():lbTab(sm,mx)}
     </div>
   </div>
   ${S.showModal?leadModal():''}
@@ -1621,6 +1622,79 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
+const OBJECTIONS={
+  PRODICTA:{
+    Agency:[
+      {q:"We already use psychometric tests / personality assessments",a:"Personality tests tell you how someone thinks. PRODICTA tells you how someone works. There are no ratings scales or multiple choice questions. Candidates are put into the actual situations they will face in the role and scored on what they do. A psychometric profile cannot tell you how someone handles a difficult client at 4pm on a Friday when their inbox is full. PRODICTA can."},
+      {q:"It's too expensive / we don't have budget",a:"One bad hire costs between £12,000 and £30,000 in recruitment fees, lost productivity, and rehiring costs. PRODICTA starts at £49 a month. If it prevents one bad hire a year it pays for itself many times over. And if budget is tight right now, Rapid Screen starts at just £6 per assessment with no subscription needed. Five minutes of real-work testing per candidate, no commitment, no contract."},
+      {q:"Our clients won't want candidates doing extra tests",a:"Candidates do not experience it as a test. They experience a realistic preview of the role, which most find genuinely engaging. Completion rates are high. And when your client receives a branded report with evidence-backed strengths, watch-outs and a clear hiring recommendation, they stop seeing it as extra. They see it as the standard they want from every agency they work with."},
+      {q:"We don't have time to add another step to our process",a:"The candidate does the work, not you. You send one link. PRODICTA runs the assessment, generates the full report within minutes, and you receive it ready to share with the client. Speed-Fit takes 15 minutes for the candidate. Rapid Screen takes just 5-8 minutes. Either way you spend zero additional time on it."},
+      {q:"Can't candidates just cheat or use AI?",a:"Every response is automatically checked for AI assistance, copy-paste patterns, rushed answers and inconsistent quality. Candidates who pass all checks receive a Verified Human badge on their report. Those who raise concerns are flagged clearly. You can see exactly which responses triggered concerns and probe them at interview. PRODICTA is built for 2026 and knows how candidates try to game assessments."},
+      {q:"We hire on gut feel and it works fine",a:"Gut feel has a documented 50% failure rate in the first 18 months. And from January 2027 under the Employment Rights Act 2025, every dismissal in the first six months carries legal risk with no compensation cap. PRODICTA gives you the documented, objective, evidence-based audit trail that proves your hiring decision was fair if it is ever challenged. It does not replace your judgement. It backs it up with proof."},
+      {q:"How is this different from a skills test?",a:"Skills tests check whether someone knows something. PRODICTA tests whether someone can perform under real conditions. A candidate can pass a skills test by knowing the right answer. They cannot pass PRODICTA by knowing things. They have to make real decisions under time pressure with competing demands landing mid-scenario. That is the difference between knowing and doing."},
+      {q:"What if good candidates drop out because of the assessment?",a:"Candidates who engage genuinely with a realistic role preview are the ones you actually want. Those who drop out rather than spend 15-25 minutes on a work simulation would likely disengage at interview or in the role anyway. For volume roles where drop-off is a concern, Rapid Screen takes just 5-8 minutes, which removes that barrier almost entirely. PRODICTA also gives every candidate personalised feedback on their performance even if not selected, which protects your employer brand."},
+      {q:"We're recruiters, it's our job to assess candidates correctly",a:"Absolutely, and PRODICTA makes you better at it. You still do the relationship work, the briefing, the interviews, the client management. What PRODICTA does is give you a layer of objective evidence that backs up your recommendation. When you present a candidate to a client with a full performance report, a Verified Human badge and evidence-backed strengths, you are not just saying trust me. You are showing them exactly why this person is the right hire. That is a different conversation entirely."},
+      {q:"We're a small team, this feels like overkill",a:"It is actually designed for small teams. You do not need an HR department or dedicated resource. Candidates get a link, complete the assessment, and you get a report. The Starter plan at £49 a month covers 10 assessments, enough for a small team to use it on their most important roles. And for occasional hiring, Rapid Screen at £6 per assessment means you can screen candidates properly with no monthly commitment at all."},
+      {q:"How will this benefit my clients?",a:"Your clients pay your fee expecting the right person. When a hire goes wrong they do not just lose money. They lose confidence in your agency. PRODICTA gives your clients a branded report for every candidate you put forward, showing performance scores, strengths with evidence, watch-outs to manage and a clear hiring recommendation. They see exactly how each candidate performed before interview. That is a level of transparency and professionalism that sets you apart from every other agency on their PSL."},
+      {q:"We deal with a lot of candidates at once, how can it help?",a:"That is exactly where PRODICTA makes the biggest difference. When you have 50 CVs for one role, the bottleneck is always the same. Someone has to read them all, filter them down and decide who to interview. PRODICTA flips that. You send the assessment link to everyone who meets the basic criteria and within minutes you have a ranked list with scores, strengths, watch-outs and a hiring recommendation for each one. For very high volume roles, Rapid Screen takes just 5-8 minutes per candidate at £6 per assessment. Use Rapid Screen to screen the full pool, then PRODICTA on your shortlist for deeper insight. Bulk Invite sends assessments to multiple candidates in one click. Auto-Shortlist surfaces the strongest candidates automatically."},
+      {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes just 15 minutes and is designed specifically for operational and volume roles. A care worker, a warehouse operative, a customer service agent, a sales rep, all get a scenario built from their actual job description at the right level of complexity. You are not putting a receptionist through a boardroom conflict scenario. For roles where even 15 minutes feels too long, Rapid Screen delivers a real-work test in 5-8 minutes at just £6 per assessment. No subscription needed. It is the perfect entry point for high-volume, lower-level hiring."}
+    ],
+    Employer:[
+      {q:"How will this benefit our company?",a:"Every hire you make is a risk. If it works out, great. If it does not, you are looking at between £12,000 and £30,000 in lost productivity, recruitment costs and management time. PRODICTA sits between that risk and your decision. Before you offer someone the role, you see exactly how they perform under real pressure, how they prioritise, how they handle conflict and how they communicate. You stop hiring on hope and start hiring on evidence. The result is fewer bad hires, faster onboarding and a team that actually performs the way you expected."},
+      {q:"We don't have the budget right now",a:"One bad hire typically costs between £12,000 and £30,000. PRODICTA starts at £49 a month, or £18 per assessment with no subscription. If budget is genuinely tight right now, Rapid Screen starts at just £6 per assessment with no commitment at all. Five to eight minutes of real-work testing per candidate. You can start screening better today for less than the cost of a coffee per candidate."},
+      {q:"Our HR team already handles this",a:"PRODICTA does not replace your HR team, it makes them better. Instead of spending hours sifting CVs and conducting first-stage interviews, your HR team sends one link and receives a full performance report within minutes. They still make the decision, they still manage the process, but they do it with objective evidence rather than gut feel. It frees up their time for the parts of the job that actually need human judgement."},
+      {q:"We only hire a few people a year, it's not worth it",a:"That actually makes it more important, not less. If you hire 50 people a year and one is wrong, you can absorb it. If you hire 5 and one is wrong, that is 20% of your new intake failing. Pay-as-you-go starts at £18 per assessment with no monthly commitment. Rapid Screen is just £6 per assessment for lower-level roles. You only pay when you actually hire, and given that a single bad hire costs upwards of £12,000, spending £6 to £65 on evidence before you commit is not a cost. It is protection."},
+      {q:"Our managers prefer to trust their own interview process",a:"Interviews have a documented 50% failure rate for predicting actual job performance. That is not because your managers are bad at interviewing. It is because interviews reward people who are good at interviews, not people who are good at the job. PRODICTA does not challenge your managers' judgement. It gives them better information to apply that judgement to. They still interview, they still decide, but they walk in knowing exactly which areas to probe and which strengths to validate."},
+      {q:"We're worried about putting candidates off",a:"Candidates do not experience it as a test. They experience a realistic preview of the role, which most find genuinely engaging. For roles where you are worried about drop-off, Rapid Screen takes just 5-8 minutes, which removes that concern almost entirely. Every candidate also receives personalised feedback on their performance regardless of outcome, which protects your employer brand and leaves a positive impression even with those you do not hire."},
+      {q:"How does this help us with Employment Rights Act 2025?",a:"From January 2027, every dismissal in the first six months carries legal risk with no compensation cap. If a hire does not work out and you cannot demonstrate that your selection process was objective, fair and evidence-based, you are exposed. PRODICTA generates a documented audit trail for every hire, showing exactly what the candidate was assessed on, how they performed and what the data said before you made your decision. That documentation is your protection if a decision is ever challenged."},
+      {q:"We've had bad hires before but it's just part of hiring",a:"It does not have to be. Bad hires happen when the information available at the point of decision is not good enough. A CV tells you what someone has done. An interview tells you how someone presents. Neither tells you how someone actually works under pressure in your specific role. PRODICTA closes that gap. It is not a guarantee, but it shifts the odds significantly in your favour by giving you real performance data before you commit."},
+      {q:"We deal with a lot of candidates at once, how can it help?",a:"When you have a high volume of applicants, the screening bottleneck costs you time and risks good candidates slipping through. For high volume roles, Rapid Screen gives every candidate a 5-8 minute real-work test at just £6 per assessment with no subscription. You get a ranked list in minutes. Use Rapid Screen to screen the full pool, then PRODICTA on your final shortlist for deeper insight before interview. Bulk Invite and Auto-Shortlist mean you manage the whole process from one dashboard."},
+      {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes 15 minutes and is designed for operational roles. For roles where even 15 minutes feels like too much, Rapid Screen delivers a real-work test in 5-8 minutes at £6 per assessment. No subscription needed. It is specifically built for entry-level and volume hiring where you need speed without sacrificing the ability to identify who can actually do the job."}
+    ]
+  },
+  AIAURA:{Agency:[],Employer:[]},
+  Linka:{Agency:[],Employer:[]},
+  Firelynx:{Agency:[],Employer:[]}
+};
+
+function objectionsTab(){
+  const prod=S.objProd||'PRODICTA';
+  const type=S.objType||'Agency';
+  const objList=OBJECTIONS[prod]?.[type]||[];
+  const expanded=S.objExpanded||{};
+
+  return`<div>
+    <div class="sec-hdr"><span class="sec-title">Objection Handler</span></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Quick reference for handling common objections during calls and demos.</div>
+
+    <!-- Product selector -->
+    <div class="filter-pills" style="margin-bottom:12px">
+      ${['PRODICTA','AIAURA','Linka','Firelynx'].map(p=>`<button class="pill ${prod===p?'active':''}" data-objprod="${p}">${p}</button>`).join('')}
+    </div>
+
+    <!-- Agency / Employer toggle -->
+    <div class="filter-pills" style="margin-bottom:1.5rem">
+      ${['Agency','Employer'].map(t=>`<button class="pill ${type===t?'active':''}" data-objtype="${t}">${t}</button>`).join('')}
+    </div>
+
+    ${objList.length===0?`<div class="empty-state"><div class="icon">💬</div><p>Objections coming soon for ${prod}.</p></div>`:`
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${objList.map((o,i)=>{
+        const isOpen=expanded[prod+type+i];
+        return`<div style="background:var(--navy-mid);border:1px solid ${isOpen?'rgba(59,191,173,0.4)':'var(--border)'};border-radius:10px;overflow:hidden;transition:border-color 0.15s">
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer" data-objexp="${prod+type+i}">
+            <div style="flex:1;font-size:13px;font-weight:500;color:${isOpen?'#3bbfad':'#fff'}">"${o.q}"</div>
+            <div style="color:var(--text-muted);font-size:13px;flex-shrink:0">${isOpen?'▲':'▼'}</div>
+          </div>
+          ${isOpen?`<div style="padding:0 16px 16px;font-size:13px;color:var(--text-secondary);line-height:1.7;border-top:1px solid var(--border)">
+            <div style="padding-top:14px">${o.a}</div>
+            <button class="action-btn" style="margin-top:12px;font-size:11px;padding:4px 12px" onclick="navigator.clipboard.writeText('${o.a.replace(/'/g,"\\'")}')">Copy response</button>
+          </div>`:''}
+        </div>`;
+      }).join('')}
+    </div>`}
+  </div>`;}
+
 function lbTab(sm,mx){
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leaderboard</span></div>
@@ -1858,7 +1932,9 @@ function bind(){
   document.querySelectorAll('[data-canceldp]').forEach(b=>b.onclick=()=>{S.editDemoProdsKey=null;S.demoProdsSel=[];r();});
 
   // Commission tab
-  document.querySelectorAll('[data-cf]').forEach(f=>f.onclick=()=>{S.commFilter=f.dataset.cf;r();});
+  document.querySelectorAll('[data-objprod]').forEach(b=>b.onclick=()=>{S.objProd=b.dataset.objprod;S.objExpanded={};r();});
+  document.querySelectorAll('[data-objtype]').forEach(b=>b.onclick=()=>{S.objType=b.dataset.objtype;S.objExpanded={};r();});
+  document.querySelectorAll('[data-objexp]').forEach(b=>b.onclick=()=>{const k=b.dataset.objexp;S.objExpanded=S.objExpanded||{};S.objExpanded[k]=!S.objExpanded[k];r();});
   const ologsignup=document.getElementById('ologsignup');
   if(ologsignup)ologsignup.onclick=()=>{
     const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
