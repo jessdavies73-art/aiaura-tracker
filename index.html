@@ -1684,9 +1684,15 @@ function bind(){
     if(S.mProds.length===0){S.mErr='Select at least one product.';r();return;}
     const st=S.isAdmin?document.getElementById('ms').value:S.user;
     const payload={staff:st,company:document.getElementById('mco').value.trim(),contact_name:document.getElementById('mcn').value.trim(),contact_email:document.getElementById('mem').value.trim(),contact_phone:document.getElementById('mph').value.trim(),account:document.getElementById('mac').value,products:S.mProds,status:document.getElementById('mst').value,date:document.getElementById('mdt').value};
+    const savedStatus=payload.status;
+    let newLeadId=null;
     if(S.editId!==null){await dbPatch('tracker_leads',S.editId,payload);}
-    else{await dbPost('tracker_leads',payload);}
-    S.showModal=false;S._mSnap={};await loadAll();};
+    else{const res=await dbPost('tracker_leads',payload);if(res&&res[0])newLeadId=res[0].id;}
+    S.showModal=false;S._mSnap={};
+    await loadAll();
+    if(savedStatus==='Demo booked'&&(newLeadId||S.editId)){
+      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;r();
+    }};
   document.querySelectorAll('[data-qv]').forEach(b=>b.onclick=()=>{
     S.qv=S.qv===b.dataset.qv?null:b.dataset.qv;r();});
   document.querySelectorAll('[data-qvclose]').forEach(b=>b.onclick=()=>{S.qv=null;r();});
