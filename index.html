@@ -485,7 +485,6 @@ async function getCallResponse(stage,prospectSaid,product,callType,history){
   const prodInfo=product==='PRODICTA'?'PRODICTA is an AI-powered pre-employment assessment platform. Candidates complete a work simulation built from the actual job description. Reports are generated instantly showing scores, strengths, watch-outs and hiring recommendations. Starts at £49/month. Pay-as-you-go from £18 per assessment. Rapid Screen is a 5-8 minute real-work test at £6 per assessment for volume roles. Key benefits for '+(callType==='Agency'?'agencies: branded reports to share with clients, bulk invite, auto-shortlist, Verified Human badge, stand out from competitors on the PSL.':'employers: objective evidence for every hire, ERA 2025 audit trail, reduces bad hires that cost £12,000 to £30,000 each.'):'';
   const ctx=stage==='start'?'This is the very start of the call. Give the rep a warm confident opening line that introduces who they are and what '+product+' does in one compelling sentence, then asks if the prospect has 2 minutes.':'The conversation is in progress. Based on what the prospect just said, give the rep the perfect response.';
   const systemPrompt='You are a sales coach helping a sales rep sell '+product+' to a '+(callType==='Agency'?'recruitment agency':'direct employer')+' on a live phone call. Tell the sales rep EXACTLY what to say next, word for word. Keep it natural, conversational and confident. No longer than 4-5 sentences. No em dashes. No bullet points. Just the words they should say out loud.\n\nAbout '+product+':\n'+prodInfo+'\n\nContext: '+ctx;
-
   const messages=stage==='start'?[{role:'user',content:'Give me my opening line for this call.'}]:[
     ...history.filter((m,idx)=>m.role==='prospect'||(m.role==='ai'&&idx===0)).slice(-6).map(m=>({
       role:m.role==='ai'?'assistant':'user',
@@ -493,17 +492,16 @@ async function getCallResponse(stage,prospectSaid,product,callType,history){
     })),
     {role:'user',content:'The prospect just said: "'+prospectSaid+'". What should I say now?'}
   ];
-
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
+    const res=await fetch('https://aiaura-tracker-api.vercel.app/api/call-script',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,system:systemPrompt,messages})
+      body:JSON.stringify({systemPrompt,callContext:`Product: ${product}. Type: ${callType}.`,messages})
     });
     const data=await res.json();
-    return data.content?.[0]?.text||'Sorry, could not generate a response. Try again.';
+    return data.content?.[0]?.text||data.error||'Sorry, could not generate a response. Try again.';
   }catch(e){
-    return'Connection error. Check your internet and try again.';
+    return'Connection error: '+e.message;
   }
 }
 
