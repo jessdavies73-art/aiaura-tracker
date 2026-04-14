@@ -480,6 +480,69 @@ async function dbDelete(table,id){
   return res.ok;
 }
 
+// --- Voice Recognition Engine ---
+let _recognition=null;
+let _micActive=false;
+let _micTranscript='';
+function startMic(){
+  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){alert('Speech recognition not supported in this browser. Use Chrome.');return;}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  _recognition=new SR();
+  _recognition.continuous=true;
+  _recognition.interimResults=true;
+  _recognition.lang='en-GB';
+  _micActive=true;_micTranscript='';r();
+  let silenceTimer=null;
+  let finalTranscript='';
+  _recognition.onresult=(e)=>{
+    let interim='';finalTranscript='';
+    for(let i=0;i<e.results.length;i++){
+      if(e.results[i].isFinal)finalTranscript+=e.results[i][0].transcript;
+      else interim+=e.results[i][0].transcript;
+    }
+    _micTranscript=(finalTranscript+interim).trim();
+    // Show live transcript in whichever input is visible
+    const inp=document.getElementById('prospectinput')||document.getElementById('csinput');
+    if(inp)inp.value=_micTranscript;
+    // Reset silence timer on every result
+    if(silenceTimer)clearTimeout(silenceTimer);
+    if(_micTranscript){
+      silenceTimer=setTimeout(()=>{
+        // Prospect stopped speaking — auto-send
+        if(_micTranscript&&_micActive){
+          const txt=_micTranscript;_micTranscript='';
+          // Send via whichever call interface is active
+          if(S.inCall){
+            S.callMessages=[...S.callMessages||[],{role:'prospect',content:txt}];
+            S.callProspectInput='';S.callLoading=true;r();
+            setTimeout(()=>{const el=document.getElementById('callmessages');if(el)el.scrollTop=el.scrollHeight;},50);
+            getCallResponse('continue',txt,S.callProd||'PRODICTA',S.callType||'Agency',S.callMessages).then(response=>{
+              S.callMessages=[...S.callMessages,{role:'ai',content:response}];S.callLoading=false;r();
+              setTimeout(()=>{const el=document.getElementById('callmessages');if(el)el.scrollTop=el.scrollHeight;},100);
+            });
+          }else if(S.callActive){
+            sendCallMessage(txt);
+          }
+        }
+      },1800);
+    }
+  };
+  _recognition.onerror=(e)=>{
+    if(e.error==='no-speech')return;
+    console.error('Mic error:',e.error);
+  };
+  _recognition.onend=()=>{
+    // Auto-restart if mic is still active (continuous listening)
+    if(_micActive){try{_recognition.start();}catch(e){}}
+  };
+  _recognition.start();
+}
+function stopMic(){
+  _micActive=false;_micTranscript='';
+  if(_recognition){try{_recognition.stop();}catch(e){}_recognition=null;}
+  r();
+}
+
 // Load all data from Supabase and reshape into S.leads / S.upsells / S.busyBlocks
 async function getCallResponse(stage,prospectSaid,product,callType,history){
   const prodInfo=product==='PRODICTA'?'PRODICTA is an AI-powered pre-employment assessment platform. Candidates complete a work simulation built from the actual job description. Reports are generated instantly showing scores, strengths, watch-outs and hiring recommendations. Starts at £49/month. Pay-as-you-go from £18 per assessment. Rapid Screen is a 5-8 minute real-work test at £6 per assessment for volume roles. Key benefits for '+(callType==='Agency'?'agencies: branded reports to share with clients, bulk invite, auto-shortlist, Verified Human badge, stand out from other agencies competing for the same clients.':'employers: objective evidence for every hire, ERA 2025 audit trail, reduces bad hires that cost £12,000 to £30,000 each.')+'. Use plain language — avoid industry jargon and acronyms. Never use PSL, ACV, MRR or other technical terms.':'';  const ctx=stage==='start'?'This is the very start of the call. Give the rep a warm confident opening line that introduces who they are and what '+product+' does in one compelling sentence, then asks if the prospect has 2 minutes.':'The conversation is in progress. Based on what the prospect just said, give the rep the perfect response.';
@@ -1782,8 +1845,9 @@ function callScriptTab(){
         <input type="text" id="csinput" placeholder="e.g. no budget, already testing, interested, bad time..." value="${S.callInput||''}" style="width:100%;background:transparent;border:none;color:#fff;font-size:13px;outline:none;font-family:var(--font)" ${loading?'disabled':''}/>
       </div>
       <button class="btn-primary" id="cssend" style="padding:10px 20px;white-space:nowrap;${loading?'opacity:0.5':''}" ${loading?'disabled':''}>Send</button>
+      <button id="csmicbtn" style="padding:10px 12px;border-radius:10px;border:1px solid ${_micActive?'#ff7675':'rgba(59,191,173,0.4)'};background:${_micActive?'rgba(255,118,117,0.15)':'rgba(59,191,173,0.1)'};color:${_micActive?'#ff7675':'#3bbfad'};cursor:pointer;font-size:16px;line-height:1" title="${_micActive?'Stop listening':'Start listening'}">${_micActive?'&#9632;':'&#127908;'}</button>
     </div>
-    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">Type what the prospect said and tap Send — the AI will tell you exactly what to say next</div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">${_micActive?'<span style="color:#ff7675">&#9679; Listening — speak and the AI responds automatically when you pause</span>':'Type what the prospect said and tap Send, or tap the mic to listen hands-free'}</div>
   </div>`;}
 
 async function sendCallMessage(userMsg){
@@ -1906,7 +1970,9 @@ function callScriptTab(){
           style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:13px;font-family:var(--font)"
           onkeydown="if(event.key==='Enter')document.getElementById('sendprospect')?.click()"/>
         <button class="btn-primary" id="sendprospect" style="width:auto;padding:10px 20px;white-space:nowrap">Get response</button>
+        <button id="micbtn" style="padding:10px 12px;border-radius:10px;border:1px solid ${_micActive?'#ff7675':'rgba(59,191,173,0.4)'};background:${_micActive?'rgba(255,118,117,0.15)':'rgba(59,191,173,0.1)'};color:${_micActive?'#ff7675':'#3bbfad'};cursor:pointer;font-size:16px;line-height:1" title="${_micActive?'Stop listening':'Start listening'}">${_micActive?'&#9632;':'&#127908;'}</button>
       </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:8px">${_micActive?'<span style="color:#ff7675">&#9679; Listening — speak and the AI responds automatically when you pause</span>':'Tap the mic to listen hands-free — no typing needed'}</div>
     </div>`}
   </div>`;}
 
@@ -2157,7 +2223,7 @@ function bind(){
     setTimeout(()=>{const el=document.getElementById('callmessages');if(el)el.scrollTop=el.scrollHeight;},100);
   };
   const endcall=document.getElementById('endcall');
-  if(endcall)endcall.onclick=()=>{S.inCall=false;S.callMessages=[];S.callLoading=false;S.callProspectInput='';r();};
+  if(endcall)endcall.onclick=()=>{stopMic();S.inCall=false;S.callMessages=[];S.callLoading=false;S.callProspectInput='';r();};
   const prospectinput=document.getElementById('prospectinput');
   if(prospectinput)prospectinput.oninput=()=>{S.callProspectInput=prospectinput.value;};
   const sendprospect=document.getElementById('sendprospect');
@@ -2182,12 +2248,16 @@ function bind(){
   const cstart=document.getElementById('cstart');
   if(cstart)cstart.onclick=()=>{S.callActive=true;S.callHistory=[];S.callInput='';S.callLoading=false;r();sendCallMessage('__start__');};
   const cend=document.getElementById('cend');
-  if(cend)cend.onclick=()=>{S.callActive=false;S.callHistory=[];S.callInput='';r();};
+  if(cend)cend.onclick=()=>{stopMic();S.callActive=false;S.callHistory=[];S.callInput='';r();};
   const csinput=document.getElementById('csinput');
   if(csinput)csinput.oninput=()=>{S.callInput=csinput.value;};
   if(csinput)csinput.onkeydown=(e)=>{if(e.key==='Enter'&&!S.callLoading){const v=csinput.value.trim();if(v)sendCallMessage(v);}};
   const cssend=document.getElementById('cssend');
   if(cssend)cssend.onclick=()=>{const v=(document.getElementById('csinput')?.value||'').trim();if(v&&!S.callLoading)sendCallMessage(v);};
+  const csmicbtn=document.getElementById('csmicbtn');
+  if(csmicbtn)csmicbtn.onclick=()=>{_micActive?stopMic():startMic();};
+  const micbtn=document.getElementById('micbtn');
+  if(micbtn)micbtn.onclick=()=>{_micActive?stopMic():startMic();};
   const ologsignup=document.getElementById('ologsignup');
   if(ologsignup)ologsignup.onclick=()=>{
     const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
