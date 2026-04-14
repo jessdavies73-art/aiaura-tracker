@@ -1996,6 +1996,7 @@ function bind(){
       if(note||reason)await dbPost('tracker_notes',{lead_id:S.lossLeadId,ts:nowTs(),txt:`Lost — ${reason}${note?' · '+note:''}`});
     }
     S.showLossModal=false;S.lossLeadId=null;await loadAll();};
+  const obusy=document.getElementById('obusy');
   if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.busyErr='';r();};
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';r();};
   const bsv=document.getElementById('bsv');
