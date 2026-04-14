@@ -1001,7 +1001,7 @@ function leadsTab(vis){
               ${l.notes.length>0?`<span style="font-size:11px;color:var(--text-muted)">📝 ${l.notes.length}</span>`:''}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button class="action-btn" style="font-size:11px;padding:3px 10px" data-od="${l.id}">+ Demo</button>
+              ${l.status==='Contacted'?`<button class="action-btn" style="font-size:11px;padding:3px 10px" data-od="${l.id}">+ Demo</button>`:''}
               <button class="action-btn rem-btn" style="font-size:11px;padding:3px 10px" data-or="${l.id}">+ Reminder</button>
             </div>
             <button class="toggle-expand" data-exp="${l.id}">${exp?'▲ collapse':'▼ expand activity'}</button>
