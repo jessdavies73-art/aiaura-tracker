@@ -26,7 +26,8 @@
     --mono: 'DM Mono', monospace;
   }
 
-  html, body { height: 100%; background: var(--navy); color: var(--text-primary); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+ background: var(--navy); color: var(--text-primary); font-family: var(--font); font-size: 14px; line-height: 1.5; }
 
   /* SCROLLBAR */
   ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: var(--navy); } ::-webkit-scrollbar-thumb { background: var(--navy-card); border-radius: 3px; }
@@ -480,6 +481,32 @@ async function dbDelete(table,id){
 }
 
 // Load all data from Supabase and reshape into S.leads / S.upsells / S.busyBlocks
+async function getCallResponse(stage,prospectSaid,product,callType,history){
+  const prodInfo=product==='PRODICTA'?'PRODICTA is an AI-powered pre-employment assessment platform. Candidates complete a work simulation built from the actual job description. Reports are generated instantly showing scores, strengths, watch-outs and hiring recommendations. Starts at £49/month. Pay-as-you-go from £18 per assessment. Rapid Screen is a 5-8 minute real-work test at £6 per assessment for volume roles. Key benefits for '+(callType==='Agency'?'agencies: branded reports to share with clients, bulk invite, auto-shortlist, Verified Human badge, stand out from competitors on the PSL.':'employers: objective evidence for every hire, ERA 2025 audit trail, reduces bad hires that cost £12,000 to £30,000 each.'):'';
+  const ctx=stage==='start'?'This is the very start of the call. Give the rep a warm confident opening line that introduces who they are and what '+product+' does in one compelling sentence, then asks if the prospect has 2 minutes.':'The conversation is in progress. Based on what the prospect just said, give the rep the perfect response.';
+  const systemPrompt='You are a sales coach helping a sales rep sell '+product+' to a '+(callType==='Agency'?'recruitment agency':'direct employer')+' on a live phone call. Tell the sales rep EXACTLY what to say next, word for word. Keep it natural, conversational and confident. No longer than 4-5 sentences. No em dashes. No bullet points. Just the words they should say out loud.\n\nAbout '+product+':\n'+prodInfo+'\n\nContext: '+ctx;
+
+  const messages=stage==='start'?[{role:'user',content:'Give me my opening line for this call.'}]:[
+    ...history.filter((m,idx)=>m.role==='prospect'||(m.role==='ai'&&idx===0)).slice(-6).map(m=>({
+      role:m.role==='ai'?'assistant':'user',
+      content:m.role==='prospect'?'The prospect just said: "'+m.content+'". What should I say?':m.content
+    })),
+    {role:'user',content:'The prospect just said: "'+prospectSaid+'". What should I say now?'}
+  ];
+
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,system:systemPrompt,messages})
+    });
+    const data=await res.json();
+    return data.content?.[0]?.text||'Sorry, could not generate a response. Try again.';
+  }catch(e){
+    return'Connection error. Check your internet and try again.';
+  }
+}
+
 async function loadAll(){
   S.loading=true;r();
   try{
@@ -548,7 +575,10 @@ let S={
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
   leads:[],upsells:[],signups:[],bonuses:[],
-  _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{}
+  _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{},
+  callType:'Agency',callProd:'PRODICTA',inCall:false,callMessages:[],callLoading:false,callProspectInput:'',
+  callActive:false,callType:'Agency',callProduct:'PRODICTA',
+  callHistory:[],callInput:'',callLoading:false,callStage:'start'
 };
 
 
@@ -783,10 +813,12 @@ function appHtml(){
         ${(S.isAdmin||COMM_STAFF.includes(S.user))?`<button class="tab-btn ${S.tab==='commission'?'active':''}" data-tab="commission">💰 Commission</button>`:''}
         <button class="tab-btn ${S.tab==='calendar'?'active':''}" data-tab="calendar">📅 Calendar</button>
         <button class="tab-btn ${S.tab==='objections'?'active':''}" data-tab="objections">💬 Objections</button>
+        <button class="tab-btn ${S.tab==='callscript'?'active':''}" data-tab="callscript">📞 Call Script</button>
+        <button class="tab-btn ${S.tab==='callscript'?'active':''}" data-tab="callscript">📞 Call Script</button>
         ${S.isAdmin?`<button class="tab-btn ${S.tab==='lb'?'active':''}" data-tab="lb">Leaderboard</button>`:''}
       </div>
 
-      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='objections'?objectionsTab():lbTab(sm,mx)}
+      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='objections'?objectionsTab():S.tab==='callscript'?callScriptTab():lbTab(sm,mx)}
     </div>
   </div>
   ${S.showModal?leadModal():''}
@@ -1695,6 +1727,192 @@ function objectionsTab(){
     </div>`}
   </div>`;}
 
+function callScriptTab(){
+  const history=S.callHistory||[];
+  const loading=S.callLoading;
+  const active=S.callActive;
+
+  if(!active){
+    return`<div>
+      <div class="sec-hdr"><span class="sec-title">Call Script</span></div>
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:2rem">AI-powered live call guide. Start a call and get told exactly what to say — just type 2-3 words about what the prospect just said and the AI responds instantly.</div>
+      <div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:14px;padding:2rem;max-width:440px;margin:0 auto">
+        <div style="font-size:15px;font-weight:600;color:#fff;margin-bottom:1.5rem;text-align:center">Start a call</div>
+        <div class="form-field"><label class="form-label">Product</label><select id="csprod">
+          <option ${S.callProduct==='PRODICTA'?'selected':''}>PRODICTA</option>
+          <option ${S.callProduct==='AIAURA'?'selected':''}>AIAURA</option>
+          <option ${S.callProduct==='Linka'?'selected':''}>Linka</option>
+          <option ${S.callProduct==='Firelynx'?'selected':''}>Firelynx</option>
+        </select></div>
+        <div class="form-field"><label class="form-label">Prospect type</label>
+          <div style="display:flex;gap:10px">
+            <button class="action-btn ${S.callType==='Agency'?'':''}\" style="flex:1;${S.callType==='Agency'?'background:rgba(59,191,173,0.2);border-color:#3bbfad;color:#3bbfad':''}" id="cstagency">Recruitment Agency</button>
+            <button class="action-btn" style="flex:1;${S.callType==='Employer'?'background:rgba(59,191,173,0.2);border-color:#3bbfad;color:#3bbfad':''}" id="cstemployer">Direct Employer</button>
+          </div>
+        </div>
+        <button class="btn-primary" id="cstart" style="margin-top:1rem">Start call</button>
+      </div>
+    </div>`;
+  }
+
+  return`<div>
+    <div class="sec-hdr">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:8px;height:8px;border-radius:50%;background:#3bbfad;animation:pulse 1.5s infinite"></div>
+        <span class="sec-title">Live Call — ${S.callProduct} — ${S.callType}</span>
+      </div>
+      <button class="action-btn" style="border-color:rgba(255,118,117,0.4);color:#ff7675" id="cend">End call</button>
+    </div>
+
+    <!-- Conversation history -->
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:1.5rem;max-height:55vh;overflow-y:auto;padding-right:4px" id="callHistory">
+      ${history.map(m=>`
+        <div style="display:flex;${m.role==='assistant'?'':'justify-content:flex-end'}">
+          <div style="max-width:85%;background:${m.role==='assistant'?'var(--navy-mid)':'rgba(59,191,173,0.12)'};border:1px solid ${m.role==='assistant'?'var(--border)':'rgba(59,191,173,0.3)'};border-radius:12px;padding:12px 16px">
+            <div style="font-size:10px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em">${m.role==='assistant'?'Say this':'Prospect said'}</div>
+            <div style="font-size:13px;color:#fff;line-height:1.6">${m.content}</div>
+            ${m.role==='assistant'?`<button class="action-btn" style="font-size:10px;padding:3px 10px;margin-top:8px" onclick="navigator.clipboard.writeText('${m.content.replace(/'/g,"\\'")}')">Copy</button>`:''}
+          </div>
+        </div>
+      `).join('')}
+      ${loading?`<div style="display:flex;gap:6px;align-items:center;padding:8px"><div style="width:6px;height:6px;border-radius:50%;background:#3bbfad;opacity:0.6"></div><div style="width:6px;height:6px;border-radius:50%;background:#3bbfad;opacity:0.8"></div><div style="width:6px;height:6px;border-radius:50%;background:#3bbfad"></div></div>`:''}
+    </div>
+
+    <!-- Input -->
+    <div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;gap:10px;align-items:flex-end">
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">What did the prospect just say? (2-3 words is enough)</div>
+        <input type="text" id="csinput" placeholder="e.g. no budget, already testing, interested, bad time..." value="${S.callInput||''}" style="width:100%;background:transparent;border:none;color:#fff;font-size:13px;outline:none;font-family:var(--font)" ${loading?'disabled':''}/>
+      </div>
+      <button class="btn-primary" id="cssend" style="padding:10px 20px;white-space:nowrap;${loading?'opacity:0.5':''}" ${loading?'disabled':''}>Send</button>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center">Type what the prospect said and tap Send — the AI will tell you exactly what to say next</div>
+  </div>`;}
+
+async function sendCallMessage(userMsg){
+  if(!userMsg.trim())return;
+  const history=S.callHistory||[];
+  history.push({role:'user',content:userMsg});
+  S.callHistory=history;S.callInput='';S.callLoading=true;r();
+
+  // Scroll to bottom
+  setTimeout(()=>{const el=document.getElementById('callHistory');if(el)el.scrollTop=el.scrollHeight;},50);
+
+  const systemPrompt=`You are a live sales call coach for ${S.callProduct}, a product sold by AIAURA Group Ltd. The salesperson's name is ${S.user}.
+The salesperson is on a COLD call with a ${S.callType==='Agency'?'recruitment agency':'direct employer'} prospect. They do not know this person yet.
+Your job is to tell the salesperson EXACTLY what to say next, word for word, in a natural conversational tone.
+Keep responses concise — 2-4 sentences maximum. No bullet points. No preamble. Just the words they should say out loud.
+No em dashes anywhere in your responses.
+
+The call stages in order:
+1. GATEKEEPER — they need to ask to speak to the right person. For agencies: "the person who manages your candidate assessment or recruitment process". For employers: "whoever heads up hiring or HR".
+2. INTRODUCTION — when the right person answers, introduce: "Hi [name], it's ${S.user} from AIAURA, hope you're well. Do you have 2 minutes?"
+3. HOOK — one compelling reason for the call tailored to ${S.callType}.
+4. QUALIFY — check they are the decision maker and understand their hiring volume/pain.
+5. PITCH — present ${S.callProduct} as the solution to their specific pain.
+6. OBJECTION HANDLING — handle confidently and bridge back to booking a demo.
+7. CLOSE — aim to book a demo. "Would you be open to a 20 minute demo this week?"
+8. WRAP UP — confirm next steps clearly.
+
+Key facts about ${S.callProduct}:
+${S.callProduct==='PRODICTA'?`PRODICTA is an AI-powered pre-employment assessment platform. Candidates complete a work simulation built from the actual job description in 15-45 minutes. Reports include scores, strengths with evidence, watch-outs, and hiring recommendations. Starts at £49/month or £18 per assessment pay-as-you-go. Rapid Screen is a 5-8 minute version at £6 per assessment for volume and entry level roles. Key benefits for ${S.callType==='Agency'?'agencies: stand out from other agencies, impress clients with branded reports, win more placements, protect reputation when a hire goes wrong, high volume screening with Bulk Invite and Auto-Shortlist':'employers: reduce bad hires, ERA 2025 legal protection, save HR time, help managers make data-backed decisions, works for all levels from entry to leadership'}. One bad hire costs £12,000 to £30,000. From January 2027 ERA 2025 means every dismissal in the first 6 months carries legal risk with no compensation cap.`:''}
+
+Always end your suggested response with a clear next step or open question to keep the conversation moving forward.`;
+
+  try{
+    const messages=[
+      {role:'user',content:`I'm on a call selling ${S.callProduct} to a ${S.callType} prospect. Give me my opening line to start the call.`},
+      ...history.slice(0,-1).map(m=>({role:m.role,content:m.content})),
+      {role:'user',content:userMsg==='__start__'?`Give me exactly what to say when the receptionist or gatekeeper answers the phone. I need to ask to be put through to the right person.`:`The prospect just said: "${userMsg}". What should I say next?`}
+    ];
+
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:300,
+        system:systemPrompt,
+        messages
+      })
+    });
+    const data=await res.json();
+    const reply=data.content?.[0]?.text||'Sorry, something went wrong. Try again.';
+    S.callHistory.push({role:'assistant',content:reply});
+  }catch(e){
+    S.callHistory.push({role:'assistant',content:'Connection error. Please try again.'});
+  }
+  S.callLoading=false;r();
+  setTimeout(()=>{const el=document.getElementById('callHistory');if(el)el.scrollTop=el.scrollHeight;},50);
+}
+
+function callScriptTab(){
+  const callType=S.callType||'Agency';
+  const callProd=S.callProd||'PRODICTA';
+  const inCall=S.inCall||false;
+  const messages=S.callMessages||[];
+  const loading=S.callLoading||false;
+  const prospectInput=S.callProspectInput||'';
+
+  return`<div>
+    <div class="sec-hdr"><span class="sec-title">Live Call Script</span></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.5rem">AI-powered. Type 2-3 words of what the prospect just said and get your next line instantly.</div>
+
+    ${!inCall?`
+    <!-- Pre-call setup -->
+    <div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:12px;padding:1.5rem;max-width:480px">
+      <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:1.25rem">Set up your call</div>
+      <div class="form-field"><label class="form-label">Product</label><select id="callprod">
+        <option ${callProd==='PRODICTA'?'selected':''}>PRODICTA</option>
+        <option ${callProd==='AIAURA'?'selected':''}>AIAURA</option>
+        <option ${callProd==='Linka'?'selected':''}>Linka</option>
+        <option ${callProd==='Firelynx'?'selected':''}>Firelynx</option>
+      </select></div>
+      <div class="form-field"><label class="form-label">Call type</label>
+        <div style="display:flex;gap:8px">
+          <button class="pill ${callType==='Agency'?'active':''}" data-calltype="Agency">Agency</button>
+          <button class="pill ${callType==='Direct'?'active':''}" data-calltype="Direct">Direct employer</button>
+        </div>
+      </div>
+      <button class="btn-primary" id="startcall" style="margin-top:0.5rem">Start call</button>
+    </div>
+    `:`
+    <!-- In-call interface -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:10px;height:10px;border-radius:50%;background:#ff7675;animation:pulse 1.5s infinite"></div>
+        <span style="font-size:13px;font-weight:500;color:#fff">Live call — ${callProd} / ${callType}</span>
+      </div>
+      <button class="action-btn" style="border-color:rgba(255,118,117,0.4);color:#ff7675" id="endcall">End call</button>
+    </div>
+
+    <!-- Messages -->
+    <div id="callmessages" style="display:flex;flex-direction:column;gap:12px;margin-bottom:1.25rem;max-height:60vh;overflow-y:auto;padding-right:4px">
+      ${messages.map(m=>`
+        <div style="display:flex;flex-direction:column;gap:4px;align-items:${m.role==='prospect'?'flex-end':'flex-start'}">
+          <div style="font-size:10px;color:var(--text-muted);padding:0 4px">${m.role==='prospect'?'Prospect said':'You say'}</div>
+          <div style="max-width:85%;padding:12px 14px;border-radius:${m.role==='prospect'?'12px 12px 4px 12px':'12px 12px 12px 4px'};font-size:13px;line-height:1.6;
+            ${m.role==='prospect'?'background:rgba(255,255,255,0.06);color:var(--text-secondary)':'background:rgba(59,191,173,0.12);border:1px solid rgba(59,191,173,0.25);color:#fff;font-weight:500'}">
+            ${m.content}
+            ${m.role==='ai'?`<button style="display:block;margin-top:8px;background:none;border:1px solid rgba(59,191,173,0.3);color:#3bbfad;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer" onclick="navigator.clipboard.writeText('${m.content.replace(/'/g,"\\'")}')">Copy</button>`:''}
+          </div>
+        </div>
+      `).join('')}
+      ${loading?`<div style="display:flex;align-items:center;gap:8px;padding:8px 0"><div style="width:8px;height:8px;border-radius:50%;background:#3bbfad;opacity:0.6"></div><div style="font-size:12px;color:var(--text-muted)">Generating response...</div></div>`:''}
+    </div>
+
+    <!-- Input -->
+    <div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:12px;padding:14px 16px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px">What did the prospect just say? (2-3 words is enough)</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="prospectinput" placeholder="e.g. no budget, already testing, interested, bad time…" value="${prospectInput}"
+          style="flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);border-radius:8px;padding:10px 14px;color:#fff;font-size:13px;font-family:var(--font)"
+          onkeydown="if(event.key==='Enter')document.getElementById('sendprospect')?.click()"/>
+        <button class="btn-primary" id="sendprospect" style="width:auto;padding:10px 20px;white-space:nowrap">Get response</button>
+      </div>
+    </div>`}
+  </div>`;}
+
 function lbTab(sm,mx){
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leaderboard</span></div>
@@ -1932,9 +2150,47 @@ function bind(){
   document.querySelectorAll('[data-canceldp]').forEach(b=>b.onclick=()=>{S.editDemoProdsKey=null;S.demoProdsSel=[];r();});
 
   // Commission tab
-  document.querySelectorAll('[data-objprod]').forEach(b=>b.onclick=()=>{S.objProd=b.dataset.objprod;S.objExpanded={};r();});
+  document.querySelectorAll('[data-calltype]').forEach(b=>b.onclick=()=>{S.callType=b.dataset.calltype;r();});
+  const callprod=document.getElementById('callprod');if(callprod)callprod.onchange=()=>{S.callProd=callprod.value;r();};
+  const startcall=document.getElementById('startcall');
+  if(startcall)startcall.onclick=async()=>{
+    S.inCall=true;S.callMessages=[];S.callLoading=true;r();
+    const opening=await getCallResponse('start','',S.callProd,S.callType,[]);
+    S.callMessages=[{role:'ai',content:opening}];S.callLoading=false;r();
+    setTimeout(()=>{const el=document.getElementById('callmessages');if(el)el.scrollTop=el.scrollHeight;},100);
+  };
+  const endcall=document.getElementById('endcall');
+  if(endcall)endcall.onclick=()=>{S.inCall=false;S.callMessages=[];S.callLoading=false;S.callProspectInput='';r();};
+  const prospectinput=document.getElementById('prospectinput');
+  if(prospectinput)prospectinput.oninput=()=>{S.callProspectInput=prospectinput.value;};
+  const sendprospect=document.getElementById('sendprospect');
+  if(sendprospect)sendprospect.onclick=async()=>{
+    const input=(document.getElementById('prospectinput')?.value||'').trim();
+    if(!input)return;
+    S.callMessages=[...S.callMessages,{role:'prospect',content:input}];
+    S.callProspectInput='';S.callLoading=true;r();
+    setTimeout(()=>{const el=document.getElementById('callmessages');if(el)el.scrollTop=el.scrollHeight;},50);
+    const response=await getCallResponse('continue',input,S.callProd,S.callType,S.callMessages);
+    S.callMessages=[...S.callMessages,{role:'ai',content:response}];
+    S.callLoading=false;r();
+    setTimeout(()=>{const el=document.getElementById('callmessages');if(el)el.scrollTop=el.scrollHeight;},100);
+  };
   document.querySelectorAll('[data-objtype]').forEach(b=>b.onclick=()=>{S.objType=b.dataset.objtype;S.objExpanded={};r();});
   document.querySelectorAll('[data-objexp]').forEach(b=>b.onclick=()=>{const k=b.dataset.objexp;S.objExpanded=S.objExpanded||{};S.objExpanded[k]=!S.objExpanded[k];r();});
+
+  // Call script
+  const cstagency=document.getElementById('cstagency');if(cstagency)cstagency.onclick=()=>{S.callType='Agency';r();};
+  const cstemployer=document.getElementById('cstemployer');if(cstemployer)cstemployer.onclick=()=>{S.callType='Employer';r();};
+  const csprod=document.getElementById('csprod');if(csprod)csprod.onchange=()=>{S.callProduct=csprod.value;};
+  const cstart=document.getElementById('cstart');
+  if(cstart)cstart.onclick=()=>{S.callActive=true;S.callHistory=[];S.callInput='';S.callLoading=false;r();sendCallMessage('__start__');};
+  const cend=document.getElementById('cend');
+  if(cend)cend.onclick=()=>{S.callActive=false;S.callHistory=[];S.callInput='';r();};
+  const csinput=document.getElementById('csinput');
+  if(csinput)csinput.oninput=()=>{S.callInput=csinput.value;};
+  if(csinput)csinput.onkeydown=(e)=>{if(e.key==='Enter'&&!S.callLoading){const v=csinput.value.trim();if(v)sendCallMessage(v);}};
+  const cssend=document.getElementById('cssend');
+  if(cssend)cssend.onclick=()=>{const v=(document.getElementById('csinput')?.value||'').trim();if(v&&!S.callLoading)sendCallMessage(v);};
   const ologsignup=document.getElementById('ologsignup');
   if(ologsignup)ologsignup.onclick=()=>{
     const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
