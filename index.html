@@ -329,14 +329,16 @@
 const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50},Founding:{c:30}};
 const UB=40;
 const STAFF=['Ricky','Katherine','Ramsey'];
-const COMM_STAFF=['Ricky','Katherine','Ramsey']; // all three earn Firelynx commission
-const PRODICTA_AIAURA_STAFF=['Ricky','Katherine']; // only these two for PRODICTA/AIAURA/Linka
+const COMM_STAFF=['Ricky','Katherine','Ramsey'];
+const PRODICTA_AIAURA_STAFF=['Ricky','Katherine'];
 const PIN='8876';
 const STAFF_PINS={Ricky:'2675',Katherine:'9247',Ramsey:'1908'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
 const PK={Linka:'linka',AIAURA:'aiaura',PRODICTA:'prodicta',Firelynx:'firelynx'};
 const STATUSES=['Contacted','Demo booked','Converted','Lost'];
 const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
+const LEAD_SOURCES=['LinkedIn','Referral','Networking event','Cold outreach','Website','Email campaign','Phone call','Other'];
+const LOSS_REASONS=['Price too high','Wrong timing','Went with competitor','No response','Not interested','Budget cut','Other'];
 
 // Commission rates per product — add others when rates confirmed
 const COMM_RATES={
@@ -496,6 +498,7 @@ async function loadAll(){
       contactEmail:l.contact_email||'',contactPhone:l.contact_phone||'',
       account:l.account||'Agency',products:l.products||[],status:l.status||'Contacted',
       date:l.date||new Date().toISOString().slice(0,10),
+      source:l.lead_source||'',lossReason:l.loss_reason||'',
       notes:(notes||[]).filter(n=>n.lead_id===l.id).map(n=>({ts:n.ts,txt:n.txt,id:n.id})),
       demos:(demos||[]).filter(d=>d.lead_id===l.id).map(d=>({
         id:d.id,dt:utcToLocal(d.dt),note:d.note||'',demoProds:d.demo_prods||[],
@@ -538,8 +541,8 @@ let S={
   loginStep:'choose',loginErr:'',_pendingUser:'',
   tab:'alerts',filter:'All',upsellFilter:'All',commFilter:'All',qv:null,
   calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',
-  showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,
-  editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,signupLeadId:null,awardStaff:'Ricky',
+  showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,showLossModal:false,
+  editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
   mProds:[],mErr:'',demoProdsSel:[],demoProdErr:'',upsellProds:[],upsellErr:'',
   upsellPrefillLeadId:null,upsellSelectedLeadId:null,
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
@@ -791,6 +794,7 @@ function appHtml(){
   ${S.showUpsellModal?upsellModal():''}
   ${S.showBusyModal?busyModal():''}
   ${S.showSignupModal?signupModal():''}
+  ${S.showLossModal?lossModal():''}
   `;}
 
 function alertsTab(alerts,ml){
@@ -951,7 +955,7 @@ function alertsTab(alerts,ml){
 
 function leadsTab(vis){
   return`<div>
-    <div class="sec-hdr"><span class="sec-title">Leads log</span><button class="action-btn" id="om">+ Add lead</button></div>
+    <div class="sec-hdr"><span class="sec-title">Leads log</span><div style="display:flex;gap:8px">${S.isAdmin?`<button class="action-btn" id="exportcsv" style="background:rgba(59,191,173,0.1);border-color:rgba(59,191,173,0.3)">↓ Export CSV</button>`:''}<button class="action-btn" id="om">+ Add lead</button></div></div>
     ${S.isAdmin?`<div class="filter-pills">${['All',...STAFF].map(n=>`<button class="pill ${S.filter===n?'active':''}" data-f="${n}">${n}</button>`).join('')}</div>`:''}
     ${vis.length===0?`<div class="empty-state"><div class="icon">📋</div><p>No leads yet — add your first one above.</p></div>`:`
     <div class="table-wrap"><table>
@@ -1581,6 +1585,42 @@ function signupModal(){
     <div class="modal-actions"><button class="btn-cancel" id="sgcm">Cancel</button><button class="btn-save" id="sgsv">Log sign-up</button></div>
   </div></div>`;}
 
+function lossModal(){
+  return`<div class="modal-overlay"><div class="modal">
+    <h3>Why was this lost?</h3>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:1.25rem">This helps track patterns and improve the sales process.</div>
+    <div class="form-field"><label class="form-label">Reason</label><select id="lossreason">
+      <option value="">— Select reason —</option>
+      ${LOSS_REASONS.map(r=>`<option>${r}</option>`).join('')}
+    </select></div>
+    <div class="form-field"><label class="form-label">Additional notes <span style="color:var(--text-muted);font-size:10px">(optional)</span></label>
+      <textarea id="lossnote" placeholder="Any extra detail…" style="height:80px"></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="losscm">Skip</button>
+      <button class="btn-save" id="losssv">Save</button>
+    </div>
+  </div></div>`;}
+
+function exportCSV(){
+  const rows=[['Staff','Company','Contact','Email','Phone','Account','Products','Status','Source','Loss Reason','Date','Demos','Notes']];
+  S.leads.forEach(l=>{
+    rows.push([
+      l.staff,l.company,l.contactName,l.contactEmail,l.contactPhone,
+      l.account,(l.products||[]).join('; '),l.status,
+      l.source||'',l.lossReason||'',l.date,
+      (l.demos||[]).length,(l.notes||[]).map(n=>n.txt).join(' | ')
+    ]);
+  });
+  const csv=rows.map(r=>r.map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`aiaura-leads-${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 function lbTab(sm,mx){
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leaderboard</span></div>
@@ -1613,6 +1653,10 @@ function leadModal(){
     </div>
     <div class="form-field"><label class="form-label">Email</label><input type="text" id="mem" placeholder="email@company.co.uk" value="${v('mem',l&&l.contactEmail)}"/></div>
     <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-top:4px">Lead details</div>
+    <div class="form-field"><label class="form-label">How did this lead come in?</label><select id="msrc">
+      <option value="">— Select source —</option>
+      ${LEAD_SOURCES.map(s=>`<option ${(v('msrc',l&&l.source)===s)?'selected':''}>${s}</option>`).join('')}
+    </select></div>
     <div class="form-field"><label class="form-label">Account type</label><select id="mac">
       <option ${(v('mac',l&&l.account)||'Agency')==='Agency'?'selected':''}>Agency</option>
       <option ${(v('mac',l&&l.account))==='Employer'?'selected':''}>Employer</option>
@@ -1676,14 +1720,14 @@ function bind(){
   document.querySelectorAll('.mpt').forEach(el=>el.onclick=()=>{
     // Snapshot all text fields before re-render so they survive
     const snap=(id)=>{const el=document.getElementById(id);return el?el.value:'';};
-    S._mSnap={ms:snap('ms'),mco:snap('mco'),mcn:snap('mcn'),mem:snap('mem'),mph:snap('mph'),mac:snap('mac'),mst:snap('mst'),mdt:snap('mdt')};
+    S._mSnap={ms:snap('ms'),mco:snap('mco'),mcn:snap('mcn'),mem:snap('mem'),mph:snap('mph'),mac:snap('mac'),mst:snap('mst'),mdt:snap('mdt'),msrc:snap('msrc')};
     const p=el.dataset.p;S.mProds=S.mProds.includes(p)?S.mProds.filter(x=>x!==p):[...S.mProds,p];S.mErr='';r();
   });
   const sv=document.getElementById('sv');
   if(sv)sv.onclick=async()=>{
     if(S.mProds.length===0){S.mErr='Select at least one product.';r();return;}
     const st=S.isAdmin?document.getElementById('ms').value:S.user;
-    const payload={staff:st,company:document.getElementById('mco').value.trim(),contact_name:document.getElementById('mcn').value.trim(),contact_email:document.getElementById('mem').value.trim(),contact_phone:document.getElementById('mph').value.trim(),account:document.getElementById('mac').value,products:S.mProds,status:document.getElementById('mst').value,date:document.getElementById('mdt').value};
+    const payload={staff:st,company:document.getElementById('mco').value.trim(),contact_name:document.getElementById('mcn').value.trim(),contact_email:document.getElementById('mem').value.trim(),contact_phone:document.getElementById('mph').value.trim(),account:document.getElementById('mac').value,products:S.mProds,status:document.getElementById('mst').value,date:document.getElementById('mdt').value,lead_source:document.getElementById('msrc')?.value||''};
     const savedStatus=payload.status;
     let newLeadId=null;
     if(S.editId!==null){await dbPatch('tracker_leads',S.editId,payload);}
@@ -1780,6 +1824,10 @@ function bind(){
     await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Status changed: ${old} → ${newStatus}`});
     let openDemo=false,openSignup=false,signupLeadId=null,signupProd='',signupPlan='',signupStaff='';
     if(newStatus==='Demo booked'){openDemo=true;}
+    if(newStatus==='Lost'){
+      await loadAll();
+      S.showLossModal=true;S.lossLeadId=l.id;r();return;
+    }
     if(newStatus==='Converted'&&COMM_STAFF.includes(l.staff)){
       const leadProd=l.products&&l.products[0]||'PRODICTA';
       const validProd=l.staff==='Ramsey'?'Firelynx':((['PRODICTA','AIAURA','Linka'].includes(leadProd)&&PRODICTA_AIAURA_STAFF.includes(l.staff))||leadProd==='Firelynx')?leadProd:'PRODICTA';
@@ -1935,7 +1983,19 @@ function bind(){
   document.querySelectorAll('[data-calweek]').forEach(b=>b.onclick=()=>{
     const v=parseInt(b.dataset.calweek);
     S.calWeekOffset=v===0?0:S.calWeekOffset+v;r();});
-  const obusy=document.getElementById('obusy');
+  const exportcsv=document.getElementById('exportcsv');
+  if(exportcsv)exportcsv.onclick=()=>exportCSV();
+  const losscm=document.getElementById('losscm');
+  if(losscm)losscm.onclick=()=>{S.showLossModal=false;S.lossLeadId=null;r();};
+  const losssv=document.getElementById('losssv');
+  if(losssv)losssv.onclick=async()=>{
+    const reason=document.getElementById('lossreason')?.value||'';
+    const note=document.getElementById('lossnote')?.value.trim()||'';
+    if(S.lossLeadId){
+      await dbPatch('tracker_leads',S.lossLeadId,{loss_reason:reason});
+      if(note||reason)await dbPost('tracker_notes',{lead_id:S.lossLeadId,ts:nowTs(),txt:`Lost — ${reason}${note?' · '+note:''}`});
+    }
+    S.showLossModal=false;S.lossLeadId=null;await loadAll();};
   if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.busyErr='';r();};
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';r();};
   const bsv=document.getElementById('bsv');
