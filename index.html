@@ -1335,7 +1335,7 @@ function calendarTab(){
               const attrs=e.type==='demo'
                 ?`onclick="${flash}console.log('inline demo click',this);try{event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')}catch(err){console.error('demo onclick err',err)}" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
                 :`onclick="${flash}console.log('inline busy click',this);try{event.stopPropagation();window.__editBusy('${e.id}')}catch(err){console.error('busy onclick err',err)}" data-editbusy="${e.id}"`;
-              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}border:2px solid red !important;" title="${e.label}" ${attrs}>
+              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${attrs}>
                 <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
               </div>`;
             }).join('')}
@@ -1351,26 +1351,29 @@ function busyModal(){
     const pad=n=>String(n).padStart(2,'0');
     return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
-  const editing=S.editBusyId;
-  const existing=editing?S.busyBlocks.find(b=>b.id===editing):null;
-  const startVal=existing?existing.start:localDt();
-  const endVal=existing?existing.end:localDt(3600000);
-  const typeVal=existing?existing.type:'meeting';
-  const labelVal=existing?existing.label:'';
-  const staffVal=existing?existing.staff:S.user;
+  const editing=!!S.editBusyId;
+  const existing=editing?S.busyBlocks.find(b=>b.id===S.editBusyId):null;
+  console.log('busyModal render',{editing,editBusyId:S.editBusyId,existing});
+  const startVal=existing&&existing.start?existing.start:localDt();
+  const endVal=existing&&existing.end?existing.end:localDt(3600000);
+  const typeVal=existing&&existing.type?existing.type:'meeting';
+  const labelVal=existing&&existing.label?existing.label:'';
+  const staffVal=existing&&existing.staff?existing.staff:S.user;
+  const STAFF_OPTS=[...STAFF,'Jessie'];
   const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
+  const staffField=S.isAdmin
+    ?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${STAFF_OPTS.map(n=>`<option value="${n}" ${n===staffVal?'selected':''}>${n}</option>`).join('')}</select></div>`
+    :`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`;
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit busy block':'Block out time'}</h3>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?'Update or delete this busy block.':'Add a busy block — visible to everyone on the shared calendar.'}</div>
-    ${S.isAdmin?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${[...STAFF,'Jessie'].map(n=>`<option ${n===staffVal?'selected':''}>${n}</option>`).join('')}</select></div>`:`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`}
+    ${staffField}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="bstart" value="${startVal}"/></div>
       <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${endVal}"/></div>
     </div>
-    <div class="form-field"><label class="form-label">What is it?</label><select id="btype">
-      ${TYPES.map(([v,lbl])=>`<option value="${v}" ${v===typeVal?'selected':''}>${lbl}</option>`).join('')}
-    </select></div>
-    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${labelVal}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
+    <div class="form-field"><label class="form-label">What is it?</label><select id="btype">${TYPES.map(([v,lbl])=>`<option value="${v}" ${v===typeVal?'selected':''}>${lbl}</option>`).join('')}</select></div>
+    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${labelVal.replace(/"/g,'&quot;')}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
@@ -1922,25 +1925,31 @@ function leadModal(){
 
 function demoModal(){
   const l=S.leads.find(x=>x.id===S.demoLeadId);
-  const editing=S.editDemoId;
-  const existingDemo=editing&&l?l.demos.find(x=>x.id===editing):null;
-  const dtValue=existingDemo?existingDemo.dt:futDt;
-  const noteValue=existingDemo?existingDemo.note:'';
-  const teamList=['Ricky','Katherine','Ramsey','Jessie'];
-  const selectedTeam=S.demoTeamSel||[];
+  const editing=!!S.editDemoId;
+  const existingDemo=editing&&l?l.demos.find(x=>x.id===S.editDemoId):null;
+  const dtValue=existingDemo&&existingDemo.dt?existingDemo.dt:futDt;
+  const noteValue=existingDemo&&existingDemo.note?existingDemo.note:'';
+  const TEAM=['Ricky','Katherine','Ramsey','Jessie'];
+  const selectedTeam=Array.isArray(S.demoTeamSel)?S.demoTeamSel:[];
   const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
   const saveLabel=S.rescheduleId?'Reschedule':(editing?'Save changes':'Book demo');
+  console.log('demoModal render',{editing,editDemoId:S.editDemoId,demoLeadId:S.demoLeadId,selectedTeam});
+  const teamButtons=TEAM.map(n=>{
+    const sel=selectedTeam.includes(n);
+    const bg=sel?'rgba(59,191,173,0.15)':'rgba(255,255,255,0.04)';
+    const bd=sel?'#3bbfad':'rgba(255,255,255,0.15)';
+    const col=sel?'#3bbfad':'var(--text-secondary)';
+    return`<button type="button" onclick="window.__toggleDemoTeam('${n}')" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;background:${bg};border:1px solid ${bd};cursor:pointer;font-size:13px;color:${col};font-family:var(--font)"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid ${sel?'#3bbfad':'rgba(255,255,255,0.35)'};background:${sel?'#3bbfad':'transparent'};color:#0c1e3c;font-size:11px;font-weight:700;line-height:14px;text-align:center">${sel?'✓':''}</span>${n}</button>`;
+  }).join('');
   return`<div class="modal-overlay"><div class="modal">
     <h3>${heading}</h3>
     ${l?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem">${l.products.map(p=>ptag(p)).join(' ')}${S.isAdmin?' &nbsp;· '+l.staff:''}</div>`:''}
     <div class="form-field"><label class="form-label">Date &amp; time</label><input type="datetime-local" id="ddt" value="${dtValue}"/></div>
-    <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${noteValue}</textarea></div>
     <div class="form-field">
       <label class="form-label">Who else is joining this demo? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
-      <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${teamList.map(n=>{const sel=selectedTeam.includes(n);return`<button type="button" class="dteam-chk" data-dteam="${n}" onclick="event.preventDefault();window.__toggleDemoTeam('${n}')" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:${sel?'rgba(59,191,173,0.12)':'rgba(255,255,255,0.04)'};border:1px solid ${sel?'rgba(59,191,173,0.5)':'rgba(255,255,255,0.12)'};cursor:pointer;font-size:12px;color:${sel?'#3bbfad':'var(--text-secondary)'};font-family:var(--font)"><span style="display:inline-block;width:13px;height:13px;border-radius:3px;border:1px solid ${sel?'#3bbfad':'rgba(255,255,255,0.3)'};background:${sel?'#3bbfad':'transparent'};color:var(--navy);font-size:10px;line-height:13px;text-align:center">${sel?'✓':''}</span>${n}</button>`;}).join('')}
-      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
     </div>
+    <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${noteValue}</textarea></div>
     <div class="modal-actions">
       <button class="btn-cancel" id="dcm">Cancel</button>
       ${editing?`<button class="btn-cancel" id="ddel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
