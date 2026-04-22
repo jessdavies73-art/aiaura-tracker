@@ -628,7 +628,7 @@ let S={
   tab:'alerts',filter:'All',upsellFilter:'All',commFilter:'All',qv:null,
   calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',editBusyId:null,
   showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,showLossModal:false,
-  editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,editDemoId:null,demoTeamSel:[],signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
+  editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,editDemoId:null,editDemoLeadId:null,demoTeamSel:[],signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
   mProds:[],mErr:'',demoProdsSel:[],demoProdErr:'',upsellProds:[],upsellErr:'',
   upsellPrefillLeadId:null,upsellSelectedLeadId:null,
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
@@ -1330,9 +1330,14 @@ function calendarTab(){
           const isT=d.toDateString()===today.toDateString();
           const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
           return`<div class="cal-cell ${isT?'today-col':''}">
-            ${evts.map(e=>`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${e.type==='demo'?`data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`:`data-editbusy="${e.id}"`}>
-              <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
-            </div>`).join('')}
+            ${evts.map(e=>{
+              const click=e.type==='demo'
+                ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')"`
+                :`onclick="event.stopPropagation();window.__editBusy('${e.id}')"`;
+              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${click}>
+                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
+              </div>`;
+            }).join('')}
           </div>`;
         }).join('')}
       `).join('')}
@@ -1920,7 +1925,7 @@ function demoModal(){
   const existingDemo=editing&&l?l.demos.find(x=>x.id===editing):null;
   const dtValue=existingDemo?existingDemo.dt:futDt;
   const noteValue=existingDemo?existingDemo.note:'';
-  const teamList=[...STAFF,'Jessie'].filter(n=>!l||n!==l.staff);
+  const teamList=['Ricky','Katherine','Ramsey','Jessie'];
   const selectedTeam=S.demoTeamSel||[];
   const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
   const saveLabel=S.rescheduleId?'Reschedule':(editing?'Save changes':'Book demo');
@@ -1930,9 +1935,9 @@ function demoModal(){
     <div class="form-field"><label class="form-label">Date &amp; time</label><input type="datetime-local" id="ddt" value="${dtValue}"/></div>
     <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${noteValue}</textarea></div>
     <div class="form-field">
-      <label class="form-label">Who else is on this demo? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+      <label class="form-label">Who else is joining this demo? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${teamList.map(n=>{const sel=selectedTeam.includes(n);return`<label class="dteam-chk" data-dteam="${n}" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid ${sel?'rgba(59,191,173,0.5)':'rgba(255,255,255,0.1)'};cursor:pointer;font-size:12px;color:${sel?'#3bbfad':'var(--text-secondary)'}"><input type="checkbox" ${sel?'checked':''} style="accent-color:#3bbfad;width:13px;height:13px"/>${n}</label>`;}).join('')}
+        ${teamList.map(n=>{const sel=selectedTeam.includes(n);return`<label class="dteam-chk" data-dteam="${n}" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid ${sel?'rgba(59,191,173,0.5)':'rgba(255,255,255,0.1)'};cursor:pointer;font-size:12px;color:${sel?'#3bbfad':'var(--text-secondary)'}"><input type="checkbox" ${sel?'checked':''} style="accent-color:#3bbfad;width:13px;height:13px;pointer-events:none"/>${n}</label>`;}).join('')}
       </div>
     </div>
     <div class="modal-actions">
@@ -1994,7 +1999,7 @@ function bind(){
     S.showModal=false;S._mSnap={};
     await loadAll();
     if(savedStatus==='Demo booked'&&(newLeadId||S.editId)){
-      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];r();
+      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();
     }};
   document.querySelectorAll('[data-qv]').forEach(b=>b.onclick=()=>{
     S.qv=S.qv===b.dataset.qv?null:b.dataset.qv;r();});
@@ -2020,7 +2025,7 @@ function bind(){
       await dbPost('tracker_notes',{lead_id:lid,ts:nowTs(),txt:`Demo note: ${txt}`});
     }
     S.demoNoteInputs[key]='';await loadAll();});
-  document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];r();});
+  document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();});
   document.querySelectorAll('[data-or]').forEach(b=>b.onclick=()=>{S.showReminderModal=true;S.reminderLeadId=b.dataset.or;r();});
   document.querySelectorAll('[data-dteam]').forEach(el=>el.onclick=(e)=>{
     e.preventDefault();
@@ -2028,22 +2033,26 @@ function bind(){
     S.demoTeamSel=S.demoTeamSel.includes(n)?S.demoTeamSel.filter(x=>x!==n):[...S.demoTeamSel,n];
     r();
   });
-  document.querySelectorAll('[data-editdemo]').forEach(b=>b.onclick=()=>{
-    const demoId=b.dataset.editdemo;const leadId=b.dataset.editleadid;
-    const l=S.leads.find(x=>x.id===leadId);const d=l&&l.demos.find(x=>x.id===demoId);
-    if(!d)return;
-    S.showDemoModal=true;S.demoLeadId=leadId;S.editDemoId=demoId;S.rescheduleId=null;
+  window.__editDemo=(demoId,leadId)=>{
+    const l=S.leads.find(x=>x.id===leadId);
+    const d=l&&l.demos.find(x=>x.id===demoId);
+    if(!l||!d)return;
+    S.showDemoModal=true;
+    S.demoLeadId=leadId;
+    S.editDemoLeadId=leadId;
+    S.editDemoId=demoId;
+    S.rescheduleId=null;
     S.demoTeamSel=[...(d.demoTeam||[])];
     r();
-  });
-  const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];r();};
+  };
+  const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();};
   const ddel=document.getElementById('ddel');
   if(ddel)ddel.onclick=async()=>{
     if(!S.editDemoId)return;
     const l=S.leads.find(x=>x.id===S.demoLeadId);
     await dbPatch('tracker_demos',S.editDemoId,{status:'cancelled'});
     if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled from calendar.'});
-    S.showDemoModal=false;S.editDemoId=null;S.rescheduleId=null;S.demoTeamSel=[];await loadAll();
+    S.showDemoModal=false;S.editDemoId=null;S.editDemoLeadId=null;S.rescheduleId=null;S.demoTeamSel=[];await loadAll();
   };
   const dsv=document.getElementById('dsv');
   if(dsv)dsv.onclick=async()=>{
@@ -2061,7 +2070,7 @@ function bind(){
       await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note,demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo booked: ${fmtDt(dt)}`});
     }
-    S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];await loadAll();};
+    S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];await loadAll();};
   document.querySelectorAll('[data-demodone]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.demodone,{status:'done'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo completed ✓'});}
@@ -2069,7 +2078,7 @@ function bind(){
   document.querySelectorAll('[data-resch]').forEach(b=>b.onclick=()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     const d=l&&l.demos.find(x=>x.id===b.dataset.resch);
-    S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;S.editDemoId=null;S.demoTeamSel=d?[...(d.demoTeam||[])]:[];r();});
+    S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=d?[...(d.demoTeam||[])]:[];r();});
   document.querySelectorAll('[data-canceldemo]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.canceldemo,{status:'cancelled'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled.'});}
@@ -2312,11 +2321,13 @@ function bind(){
     S.showLossModal=false;S.lossLeadId=null;await loadAll();};
   const obusy=document.getElementById('obusy');
   if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';r();};
-  document.querySelectorAll('[data-editbusy]').forEach(b=>b.onclick=()=>{
-    const id=b.dataset.editbusy;
+  window.__editBusy=(id)=>{
     if(!S.busyBlocks.find(x=>x.id===id))return;
-    S.showBusyModal=true;S.editBusyId=id;S.busyErr='';r();
-  });
+    S.editBusyId=id;
+    S.showBusyModal=true;
+    S.busyErr='';
+    r();
+  };
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;r();};
   const bdel=document.getElementById('bdel');
   if(bdel)bdel.onclick=async()=>{
