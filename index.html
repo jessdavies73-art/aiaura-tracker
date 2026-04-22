@@ -1331,10 +1331,9 @@ function calendarTab(){
           const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
           return`<div class="cal-cell ${isT?'today-col':''}">
             ${evts.map(e=>{
-              const flash=`this.style.background='red';setTimeout(()=>{this.style.background=''},500);`;
               const attrs=e.type==='demo'
-                ?`onclick="${flash}console.log('inline demo click',this);try{event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')}catch(err){console.error('demo onclick err',err)}" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
-                :`onclick="${flash}console.log('inline busy click',this);try{event.stopPropagation();window.__editBusy('${e.id}')}catch(err){console.error('busy onclick err',err)}" data-editbusy="${e.id}"`;
+                ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
+                :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
               return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${attrs}>
                 <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
               </div>`;
@@ -1346,34 +1345,30 @@ function calendarTab(){
   </div>`;}
 
 function busyModal(){
-  function localDt(offset=0){
-    const d=new Date(Date.now()+offset);
-    const pad=n=>String(n).padStart(2,'0');
-    return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-  const editing=!!S.editBusyId;
-  const existing=editing?S.busyBlocks.find(b=>b.id===S.editBusyId):null;
-  console.log('busyModal render',{editing,editBusyId:S.editBusyId,existing});
-  const startVal=existing&&existing.start?existing.start:localDt();
-  const endVal=existing&&existing.end?existing.end:localDt(3600000);
-  const typeVal=existing&&existing.type?existing.type:'meeting';
-  const labelVal=existing&&existing.label?existing.label:'';
-  const staffVal=existing&&existing.staff?existing.staff:S.user;
+  const pad=n=>String(n).padStart(2,'0');
+  const localDt=(offset=0)=>{const d=new Date(Date.now()+offset);return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+  const existing=S.editBusyId?S.busyBlocks.find(b=>b.id===S.editBusyId):null;
+  const editing=!!existing;
+  const startVal=editing?existing.start:localDt();
+  const endVal=editing?existing.end:localDt(3600000);
+  const typeVal=editing?existing.type:'meeting';
+  const labelVal=editing?(existing.label||''):'';
+  const staffVal=editing?existing.staff:S.user;
   const STAFF_OPTS=[...STAFF,'Jessie'];
   const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
-  const staffField=S.isAdmin
-    ?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${STAFF_OPTS.map(n=>`<option value="${n}" ${n===staffVal?'selected':''}>${n}</option>`).join('')}</select></div>`
-    :`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`;
+  const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit busy block':'Block out time'}</h3>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?'Update or delete this busy block.':'Add a busy block — visible to everyone on the shared calendar.'}</div>
-    ${staffField}
+    ${S.isAdmin
+      ?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${STAFF_OPTS.map(n=>`<option value="${n}"${n===staffVal?' selected':''}>${n}</option>`).join('')}</select></div>`
+      :`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="bstart" value="${startVal}"/></div>
-      <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${endVal}"/></div>
+      <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="bstart" value="${esc(startVal)}"/></div>
+      <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${esc(endVal)}"/></div>
     </div>
-    <div class="form-field"><label class="form-label">What is it?</label><select id="btype">${TYPES.map(([v,lbl])=>`<option value="${v}" ${v===typeVal?'selected':''}>${lbl}</option>`).join('')}</select></div>
-    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${labelVal.replace(/"/g,'&quot;')}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
+    <div class="form-field"><label class="form-label">What is it?</label><select id="btype">${TYPES.map(([v,lbl])=>`<option value="${v}"${v===typeVal?' selected':''}>${lbl}</option>`).join('')}</select></div>
+    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
@@ -1933,7 +1928,6 @@ function demoModal(){
   const selectedTeam=Array.isArray(S.demoTeamSel)?S.demoTeamSel:[];
   const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
   const saveLabel=S.rescheduleId?'Reschedule':(editing?'Save changes':'Book demo');
-  console.log('demoModal render',{editing,editDemoId:S.editDemoId,demoLeadId:S.demoLeadId,selectedTeam});
   const teamButtons=TEAM.map(n=>{
     const sel=selectedTeam.includes(n);
     const bg=sel?'rgba(59,191,173,0.15)':'rgba(255,255,255,0.04)';
@@ -2042,11 +2036,9 @@ function bind(){
     r();
   };
   window.__editDemo=(demoId,leadId)=>{
-    console.log('editDemo called',demoId,leadId);
     const l=S.leads.find(x=>x.id===leadId);
     const d=l&&l.demos.find(x=>x.id===demoId);
-    console.log('editDemo lookup',{lead:!!l,demo:!!d,leadsCount:S.leads.length});
-    if(!l||!d){console.warn('editDemo: lead or demo not found — aborting');return;}
+    if(!l||!d)return;
     S.showDemoModal=true;
     S.demoLeadId=leadId;
     S.editDemoLeadId=leadId;
@@ -2057,7 +2049,6 @@ function bind(){
   };
   document.querySelectorAll('[data-editdemo]').forEach(b=>b.onclick=(e)=>{
     e.stopPropagation();
-    console.log('data-editdemo click fallback fired');
     window.__editDemo(b.dataset.editdemo,b.dataset.editleadid);
   });
   const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();};
@@ -2337,10 +2328,8 @@ function bind(){
   const obusy=document.getElementById('obusy');
   if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';r();};
   window.__editBusy=(id)=>{
-    console.log('editBusy called',id);
     const bl=S.busyBlocks.find(x=>x.id===id);
-    console.log('editBusy lookup',{found:!!bl,blocksCount:S.busyBlocks.length});
-    if(!bl){console.warn('editBusy: block not found — aborting');return;}
+    if(!bl)return;
     S.editBusyId=id;
     S.showBusyModal=true;
     S.busyErr='';
@@ -2348,7 +2337,6 @@ function bind(){
   };
   document.querySelectorAll('[data-editbusy]').forEach(b=>b.onclick=(e)=>{
     e.stopPropagation();
-    console.log('data-editbusy click fallback fired');
     window.__editBusy(b.dataset.editbusy);
   });
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;r();};
