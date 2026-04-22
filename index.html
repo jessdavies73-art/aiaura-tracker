@@ -330,11 +330,11 @@
 <script>
 const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50},Founding:{c:30}};
 const UB=40;
-const STAFF=['Ricky','Katherine','Ramsey'];
-const COMM_STAFF=['Ricky','Katherine','Ramsey'];
+const STAFF=['Ricky','Katherine'];
+const COMM_STAFF=['Ricky','Katherine'];
 const PRODICTA_AIAURA_STAFF=['Ricky','Katherine'];
 const PIN='8876';
-const STAFF_PINS={Ricky:'2675',Katherine:'9247',Ramsey:'1908'};
+const STAFF_PINS={Ricky:'2675',Katherine:'9247'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
 const PK={Linka:'linka',AIAURA:'aiaura',PRODICTA:'prodicta',Firelynx:'firelynx'};
 const STATUSES=['Contacted','Demo booked','Converted','Lost'];
@@ -415,7 +415,7 @@ const COMM_RATES={
       'Flow (Agency)':      {price:1695, signup:Math.round(1695*0.10), label:'10%'},
       'Pipeline (Agency)':  {price:3250, signup:Math.round(3250*0.15), label:'15%'},
     },
-    allStaff:true // Ricky, Katherine and Ramsey all earn this
+    allStaff:true // Ricky and Katherine both earn this
   }
 };
 
@@ -1251,7 +1251,7 @@ function upsellModal(){
   </div></div>`;}
 
 function calendarTab(){
-  const STAFF_COLORS={Ricky:'#3bbfad',Katherine:'#a29bfe',Ramsey:'#fac775',Jessie:'#74b9ff'};
+  const STAFF_COLORS={Ricky:'#3bbfad',Katherine:'#a29bfe',Jessie:'#74b9ff'};
   const HOURS=Array.from({length:14},(_,i)=>i+7); // 7am–8pm
   const today=new Date();today.setHours(0,0,0,0);
   const weekStart=new Date(today);
@@ -1357,7 +1357,7 @@ function busyModal(){
   const staffVal=editing?existing.staff:S.user;
   const STAFF_OPTS=[...STAFF,'Jessie'];
   const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
-  const TEAM=['Ricky','Katherine','Ramsey','Jessie'];
+  const TEAM=['Ricky','Katherine','Jessie'];
   const selectedTeam=Array.isArray(S.busyTeamSel)?S.busyTeamSel:[];
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   const teamButtons=TEAM.map(n=>{
@@ -1427,7 +1427,7 @@ function commissionTab(){
       <span class="sec-title">Commission</span>
       <button class="action-btn" id="ologsignup">+ Log sign-up</button>
     </div>
-    ${S.isAdmin?`<div class="filter-pills">${['All','Ricky','Katherine','Ramsey'].map(n=>`<button class="pill ${S.commFilter===n?'active':''}" data-cf="${n}">${n}</button>`).join('')}</div>`:''}
+    ${S.isAdmin?`<div class="filter-pills">${['All','Ricky','Katherine'].map(n=>`<button class="pill ${S.commFilter===n?'active':''}" data-cf="${n}">${n}</button>`).join('')}</div>`:''}
 
     <!-- TOTALS -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem">
@@ -1442,7 +1442,7 @@ function commissionTab(){
     ${S.isAdmin?`<div style="background:var(--navy-mid);border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1.5rem">
       <div style="font-size:12px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:1rem">This month — sign-up count</div>
       <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1rem">
-        ${COMM_STAFF.map(name=>{const cnt=thisMonthSignups.filter(sg=>sg.staff===name).length;return`<div><div style="font-size:13px;font-weight:500;color:#fff">${name}</div><div style="font-size:24px;font-weight:600;color:${cnt>=15?'#3bbfad':'#fac775'}">${cnt}</div><div style="font-size:11px;color:var(--text-muted)">${name==='Ramsey'?'Firelynx only':cnt>=15?'✓ Target hit':'of 15 target'}</div></div>`;}).join('')}
+        ${COMM_STAFF.map(name=>{const cnt=thisMonthSignups.filter(sg=>sg.staff===name).length;return`<div><div style="font-size:13px;font-weight:500;color:#fff">${name}</div><div style="font-size:24px;font-weight:600;color:${cnt>=15?'#3bbfad':'#fac775'}">${cnt}</div><div style="font-size:11px;color:var(--text-muted)">${cnt>=15?'✓ Target hit':'of 15 target'}</div></div>`;}).join('')}
       </div>
       ${allHit15?`<div style="background:rgba(59,191,173,0.12);border:1px solid rgba(59,191,173,0.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#3bbfad">🎉 Both hit 15+ this month — £${TEAM_TARGET_BONUS} team bonus each applies!</div>`:''}
       <div style="margin-top:1rem;display:flex;gap:8px;flex-wrap:wrap">
@@ -1938,7 +1938,7 @@ function demoModal(){
   const existingDemo=editing&&l?l.demos.find(x=>x.id===S.editDemoId):null;
   const dtValue=existingDemo&&existingDemo.dt?existingDemo.dt:futDt;
   const noteValue=existingDemo&&existingDemo.note?existingDemo.note:'';
-  const TEAM=['Ricky','Katherine','Ramsey','Jessie'];
+  const TEAM=['Ricky','Katherine','Jessie'];
   const selectedTeam=Array.isArray(S.demoTeamSel)?S.demoTeamSel:[];
   const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
   const saveLabel=S.rescheduleId?'Reschedule':(editing?'Save changes':'Book demo');
@@ -2143,7 +2143,7 @@ function bind(){
     }
     if(newStatus==='Converted'&&COMM_STAFF.includes(l.staff)){
       const leadProd=l.products&&l.products[0]||'PRODICTA';
-      const validProd=l.staff==='Ramsey'?'Firelynx':((['PRODICTA','AIAURA','Linka'].includes(leadProd)&&PRODICTA_AIAURA_STAFF.includes(l.staff))||leadProd==='Firelynx')?leadProd:'PRODICTA';
+      const validProd=((['PRODICTA','AIAURA','Linka'].includes(leadProd)&&PRODICTA_AIAURA_STAFF.includes(l.staff))||leadProd==='Firelynx')?leadProd:'PRODICTA';
       let firstPlan='';
       if(validProd==='AIAURA'){const aiR=getAIAURARate(l.staff);firstPlan=Object.keys(aiR?.plans||{})[0]||'';}
       else{firstPlan=Object.keys(COMM_RATES[validProd]?.plans||{})[0]||'';}
@@ -2205,7 +2205,7 @@ function bind(){
   const ologsignup=document.getElementById('ologsignup');
   if(ologsignup)ologsignup.onclick=()=>{
     const defaultStaff=COMM_STAFF.includes(S.user)?S.user:'Ricky';
-    const defaultProd=defaultStaff==='Ramsey'?'Firelynx':'PRODICTA';
+    const defaultProd='PRODICTA';
     const defaultPlan=Object.keys(COMM_RATES[defaultProd]?.plans||{})[0]||'';
     S.showSignupModal=true;S.signupLeadId=null;S._signupProd=defaultProd;S._signupPlan=defaultPlan;S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';S._signupStaff=defaultStaff;S._signupChkErr='';r();};
   const sgcm=document.getElementById('sgcm');if(sgcm)sgcm.onclick=()=>{S.showSignupModal=false;S._signupAddons=[];S._signupChkErr='';r();};
@@ -2213,9 +2213,7 @@ function bind(){
   const sgstaff=document.getElementById('sgstaff');
   if(sgstaff)sgstaff.onchange=()=>{
     S._signupStaff=sgstaff.value;
-    // Ramsey can only do Firelynx
-    if(sgstaff.value==='Ramsey'){S._signupProd='Firelynx';S._signupPlan=Object.keys(COMM_RATES.Firelynx.plans)[0];}
-    else if(S._signupProd==='AIAURA'){const aiRates=getAIAURARate(sgstaff.value);S._signupPlan=Object.keys(aiRates?.plans||{})[0]||'';}
+    if(S._signupProd==='AIAURA'){const aiRates=getAIAURARate(sgstaff.value);S._signupPlan=Object.keys(aiRates?.plans||{})[0]||'';}
     S._signupAddons=[];S._signupCustomPrice='';r();};
   const sgprod=document.getElementById('sgprod');
   if(sgprod)sgprod.onchange=()=>{
