@@ -309,7 +309,8 @@
   .cal-cell:last-child { border-right: none; }
   .cal-cell:hover { background: rgba(255,255,255,0.04); }
   .cal-cell.today-col { background: rgba(59,191,173,0.04); }
-  .cal-event { position: absolute; left: 2px; right: 2px; border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; z-index: 2; cursor: default; line-height: 1.4; }
+  .cal-event { position: absolute; left: 2px; right: 2px; border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; z-index: 2; cursor: pointer; line-height: 1.4; transition: filter 0.12s, transform 0.12s, box-shadow 0.12s; }
+  .cal-event:hover { filter: brightness(1.2); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
   .cal-event.demo { background: rgba(250,199,117,0.25); border-left: 3px solid #fac775; color: #fac775; }
   .cal-event.busy-meeting { background: rgba(116,185,255,0.18); border-left: 3px solid #74b9ff; color: #74b9ff; }
   .cal-event.busy-networking { background: rgba(162,155,254,0.18); border-left: 3px solid #a29bfe; color: #a29bfe; }
@@ -543,8 +544,8 @@ function stopMic(){
 
 // Load all data from Supabase and reshape into S.leads / S.upsells / S.busyBlocks
 async function getCallResponse(stage,prospectSaid,product,callType,history){
-  const prodInfo=product==='PRODICTA'?'PRODICTA is an AI-powered pre-employment assessment platform. Candidates complete a work simulation built from the actual job description. Reports are generated instantly showing scores, strengths, watch-outs and hiring recommendations. Starts at £49/month. Pay-as-you-go from £18 per assessment. Rapid Screen is a 5-8 minute real-work test at £6 per assessment for volume roles. Key benefits for '+(callType==='Agency'?'agencies: branded reports to share with clients, bulk invite, auto-shortlist, Verified Human badge, stand out from other agencies competing for the same clients.':'employers: objective evidence for every hire, ERA 2025 audit trail, reduces bad hires that cost £12,000 to £30,000 each.')+'. Use plain language — avoid industry jargon and acronyms. Never use PSL, ACV, MRR or other technical terms.':'';  const ctx=stage==='start'?'This is the very start of the call. The sales rep\'s name is '+S.user+'. Give a natural cold call opener. Start with their name and company. Then one short sentence on what '+product+' does. Then immediately ask if they handle hiring or candidate assessment. Keep it under 3 sentences. Sound like a real person not a salesperson.':'The conversation is in progress. Based on what the prospect just said, give the rep the perfect response.';
-  const systemPrompt='You are a sales coach helping a sales rep named '+S.user+' sell '+product+' to a '+(callType==='Agency'?'recruitment agency':'direct employer')+' on a live phone call. Tell the sales rep EXACTLY what to say next, word for word. Keep it natural, conversational and confident. No longer than 4-5 sentences. No em dashes. No bullet points. No industry jargon or acronyms like PSL, ACV, MRR. Just plain simple words they should say out loud.\n\nAbout '+product+':\n'+prodInfo+'\n\nContext: '+ctx;
+  const ctx=stage==='start'?'This is the very start of the call. Give a natural cold call opener. Start with their name and company. Then one short sentence on what PRODICTA does. Then immediately ask if they handle hiring or candidate assessment. Keep it under 3 sentences. Sound like a real person not a salesperson.':'The conversation is in progress. Based on what the prospect just said, give the rep the perfect response.';
+  const systemPrompt='You are an elite sales coach and closing expert for PRODICTA, an AI-powered pre-employment assessment platform sold by AIAURA Group Ltd. Your job is to coach a sales rep named '+S.user+' through a live cold call to a '+(callType==='Agency'?'recruitment agency':'direct employer')+' prospect, telling them word for word exactly what to say to get a demo booked.\n\nYour responses must:\n- Be natural, confident and conversational - sound like a top sales person not a robot\n- Be maximum 3-4 sentences - short enough to say quickly on a live call\n- Always end with either a question to keep the conversation going or a clear push to book a demo\n- Handle objections by acknowledging briefly then pivoting back to value and the demo\n- Use social proof where relevant - "agencies we work with" / "our clients tell us"\n- Create urgency around ERA 2025 - from January 2027 employers face unlimited liability for poor hiring decisions\n- Never use jargon - no PSL, ACV, MRR, acronyms\n- No em dashes, no bullet points, just words they say out loud\n- If the prospect is warm, go straight for the close - "I\'d love to show you a quick 20 minute demo this week, would Thursday or Friday work for you?"\n- If prospect is cold or objecting, empathise briefly then bridge to a question that gets them talking\n- If rep is struggling, give them a recovery line that re-engages without being pushy\n\nKey facts to use:\n- PRODICTA starts at £49/month or £18 per assessment pay as you go\n- Rapid Screen is £6 per assessment for volume/entry level roles - 5-8 minutes\n- One bad hire costs £12,000 to £30,000\n- From January 2027 ERA 2025 means unlimited legal liability for dismissals in first 6 months\n- Candidates cannot cheat - Verified Human badge proves authenticity\n- Reports are branded with the agency logo - clients see agency name not PRODICTA\n- Works for all levels from entry level to boardroom\n- The goal of every call is to book a 20 minute demo\n\nThe product being sold is PRODICTA to a '+(callType==='Agency'?'recruitment agency':'direct employer')+' prospect. Keep responses tight, punchy and focused on getting that demo booked.\n\nContext: '+ctx;
   const messages=stage==='start'?[{role:'user',content:'Give me my opening line for this call.'}]:[
     ...history.filter((m,idx)=>m.role==='prospect'||(m.role==='ai'&&idx===0)).slice(-6).map(m=>({
       role:m.role==='ai'?'assistant':'user',
@@ -587,7 +588,7 @@ async function loadAll(){
       notes:(notes||[]).filter(n=>n.lead_id===l.id).map(n=>({ts:n.ts,txt:n.txt,id:n.id})),
       demos:(demos||[]).filter(d=>d.lead_id===l.id).map(d=>({
         id:d.id,dt:utcToLocal(d.dt),note:d.note||'',demoProds:d.demo_prods||[],
-        demoNotes:d.demo_notes||[],status:d.status||'upcoming'
+        demoNotes:d.demo_notes||[],demoTeam:d.demo_team||[],status:d.status||'upcoming'
       })),
       reminders:(reminders||[]).filter(r=>r.lead_id===l.id).map(r=>({
         id:r.id,dt:utcToLocal(r.dt),txt:r.txt,done:r.done||false
@@ -625,9 +626,9 @@ let S={
   loggedIn:false,isAdmin:false,user:null,loading:false,
   loginStep:'choose',loginErr:'',_pendingUser:'',
   tab:'alerts',filter:'All',upsellFilter:'All',commFilter:'All',qv:null,
-  calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',
+  calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',editBusyId:null,
   showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,showLossModal:false,
-  editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
+  editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,editDemoId:null,demoTeamSel:[],signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
   mProds:[],mErr:'',demoProdsSel:[],demoProdErr:'',upsellProds:[],upsellErr:'',
   upsellPrefillLeadId:null,upsellSelectedLeadId:null,
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
@@ -1271,7 +1272,7 @@ function calendarTab(){
     S.leads.forEach(l=>{
       (l.demos||[]).filter(d=>d.status==='upcoming').forEach(d=>{
         if(sameLocalDay(new Date(d.dt),day)){
-          evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,color:STAFF_COLORS[l.staff]||'#fac775'});
+          evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,demoId:d.id,leadId:l.id,color:STAFF_COLORS[l.staff]||'#fac775'});
         }
       });
     });
@@ -1329,9 +1330,8 @@ function calendarTab(){
           const isT=d.toDateString()===today.toDateString();
           const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
           return`<div class="cal-cell ${isT?'today-col':''}">
-            ${evts.map(e=>`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}">
+            ${evts.map(e=>`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${e.type==='demo'?`data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`:`data-editbusy="${e.id}"`}>
               <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
-              ${e.type==='busy'?`<button onclick="event.stopPropagation();window.__delBusy('${e.id}')" style="float:right;background:none;border:none;color:inherit;opacity:0.5;cursor:pointer;font-size:10px;padding:0 2px">×</button>`:''}
             </div>`).join('')}
           </div>`;
         }).join('')}
@@ -1345,23 +1345,32 @@ function busyModal(){
     const pad=n=>String(n).padStart(2,'0');
     return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
+  const editing=S.editBusyId;
+  const existing=editing?S.busyBlocks.find(b=>b.id===editing):null;
+  const startVal=existing?existing.start:localDt();
+  const endVal=existing?existing.end:localDt(3600000);
+  const typeVal=existing?existing.type:'meeting';
+  const labelVal=existing?existing.label:'';
+  const staffVal=existing?existing.staff:S.user;
+  const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
   return`<div class="modal-overlay"><div class="modal">
-    <h3>Block out time</h3>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Add a busy block — visible to everyone on the shared calendar.</div>
-    ${S.isAdmin?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${[...STAFF,'Jessie'].map(n=>`<option>${n}</option>`).join('')}</select></div>`:`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${S.user}</strong></div>`}
+    <h3>${editing?'Edit busy block':'Block out time'}</h3>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?'Update or delete this busy block.':'Add a busy block — visible to everyone on the shared calendar.'}</div>
+    ${S.isAdmin?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${[...STAFF,'Jessie'].map(n=>`<option ${n===staffVal?'selected':''}>${n}</option>`).join('')}</select></div>`:`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="bstart" value="${localDt()}"/></div>
-      <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${localDt(3600000)}"/></div>
+      <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="bstart" value="${startVal}"/></div>
+      <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${endVal}"/></div>
     </div>
     <div class="form-field"><label class="form-label">What is it?</label><select id="btype">
-      <option value="meeting">Meeting</option>
-      <option value="networking">Networking</option>
-      <option value="busy">Busy — unavailable</option>
-      <option value="other">Other</option>
+      ${TYPES.map(([v,lbl])=>`<option value="${v}" ${v===typeVal?'selected':''}>${lbl}</option>`).join('')}
     </select></div>
-    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
+    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${labelVal}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
-    <div class="modal-actions"><button class="btn-cancel" id="bcm">Cancel</button><button class="btn-save" id="bsv">Save block</button></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="bcm">Cancel</button>
+      ${editing?`<button class="btn-cancel" id="bdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      <button class="btn-save" id="bsv">${editing?'Save changes':'Save block'}</button>
+    </div>
   </div></div>`;}
 
 
@@ -1907,12 +1916,30 @@ function leadModal(){
 
 function demoModal(){
   const l=S.leads.find(x=>x.id===S.demoLeadId);
+  const editing=S.editDemoId;
+  const existingDemo=editing&&l?l.demos.find(x=>x.id===editing):null;
+  const dtValue=existingDemo?existingDemo.dt:futDt;
+  const noteValue=existingDemo?existingDemo.note:'';
+  const teamList=[...STAFF,'Jessie'].filter(n=>!l||n!==l.staff);
+  const selectedTeam=S.demoTeamSel||[];
+  const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
+  const saveLabel=S.rescheduleId?'Reschedule':(editing?'Save changes':'Book demo');
   return`<div class="modal-overlay"><div class="modal">
-    <h3>${S.rescheduleId?'Reschedule demo':'Book a demo'}</h3>
+    <h3>${heading}</h3>
     ${l?`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1.25rem">${l.products.map(p=>ptag(p)).join(' ')}${S.isAdmin?' &nbsp;· '+l.staff:''}</div>`:''}
-    <div class="form-field"><label class="form-label">Date &amp; time</label><input type="datetime-local" id="ddt" value="${futDt}"/></div>
-    <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard"></textarea></div>
-    <div class="modal-actions"><button class="btn-cancel" id="dcm">Cancel</button><button class="btn-save" id="dsv">${S.rescheduleId?'Reschedule':'Book demo'}</button></div>
+    <div class="form-field"><label class="form-label">Date &amp; time</label><input type="datetime-local" id="ddt" value="${dtValue}"/></div>
+    <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${noteValue}</textarea></div>
+    <div class="form-field">
+      <label class="form-label">Who else is on this demo? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${teamList.map(n=>{const sel=selectedTeam.includes(n);return`<label class="dteam-chk" data-dteam="${n}" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid ${sel?'rgba(59,191,173,0.5)':'rgba(255,255,255,0.1)'};cursor:pointer;font-size:12px;color:${sel?'#3bbfad':'var(--text-secondary)'}"><input type="checkbox" ${sel?'checked':''} style="accent-color:#3bbfad;width:13px;height:13px"/>${n}</label>`;}).join('')}
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="dcm">Cancel</button>
+      ${editing?`<button class="btn-cancel" id="ddel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      <button class="btn-save" id="dsv">${saveLabel}</button>
+    </div>
   </div></div>`;}
 
 function remModal(){
@@ -1967,7 +1994,7 @@ function bind(){
     S.showModal=false;S._mSnap={};
     await loadAll();
     if(savedStatus==='Demo booked'&&(newLeadId||S.editId)){
-      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;r();
+      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];r();
     }};
   document.querySelectorAll('[data-qv]').forEach(b=>b.onclick=()=>{
     S.qv=S.qv===b.dataset.qv?null:b.dataset.qv;r();});
@@ -1993,23 +2020,48 @@ function bind(){
       await dbPost('tracker_notes',{lead_id:lid,ts:nowTs(),txt:`Demo note: ${txt}`});
     }
     S.demoNoteInputs[key]='';await loadAll();});
-  document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;r();});
+  document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];r();});
   document.querySelectorAll('[data-or]').forEach(b=>b.onclick=()=>{S.showReminderModal=true;S.reminderLeadId=b.dataset.or;r();});
-  const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;r();};
+  document.querySelectorAll('[data-dteam]').forEach(el=>el.onclick=(e)=>{
+    e.preventDefault();
+    const n=el.dataset.dteam;
+    S.demoTeamSel=S.demoTeamSel.includes(n)?S.demoTeamSel.filter(x=>x!==n):[...S.demoTeamSel,n];
+    r();
+  });
+  document.querySelectorAll('[data-editdemo]').forEach(b=>b.onclick=()=>{
+    const demoId=b.dataset.editdemo;const leadId=b.dataset.editleadid;
+    const l=S.leads.find(x=>x.id===leadId);const d=l&&l.demos.find(x=>x.id===demoId);
+    if(!d)return;
+    S.showDemoModal=true;S.demoLeadId=leadId;S.editDemoId=demoId;S.rescheduleId=null;
+    S.demoTeamSel=[...(d.demoTeam||[])];
+    r();
+  });
+  const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];r();};
+  const ddel=document.getElementById('ddel');
+  if(ddel)ddel.onclick=async()=>{
+    if(!S.editDemoId)return;
+    const l=S.leads.find(x=>x.id===S.demoLeadId);
+    await dbPatch('tracker_demos',S.editDemoId,{status:'cancelled'});
+    if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled from calendar.'});
+    S.showDemoModal=false;S.editDemoId=null;S.rescheduleId=null;S.demoTeamSel=[];await loadAll();
+  };
   const dsv=document.getElementById('dsv');
   if(dsv)dsv.onclick=async()=>{
     const l=S.leads.find(x=>x.id===S.demoLeadId);if(!l)return;
     const dt=document.getElementById('ddt').value;const note=document.getElementById('dnote').value.trim();
-    if(S.rescheduleId){
+    if(S.editDemoId){
+      await dbPatch('tracker_demos',S.editDemoId,{dt:saveLocalDt(dt),note,demo_team:S.demoTeamSel});
+      await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo updated: ${fmtDt(dt)}`});
+    }else if(S.rescheduleId){
       await dbPatch('tracker_demos',S.rescheduleId,{status:'rescheduled'});
-      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo rescheduled to ${fmtDt(dt)}`});
       S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`resch-${Date.now()}`,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id}];
     }else{
-      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note,demo_prods:l.products,demo_notes:[],status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note,demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo booked: ${fmtDt(dt)}`});
     }
-    S.showDemoModal=false;S.rescheduleId=null;await loadAll();};
+    S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.demoTeamSel=[];await loadAll();};
   document.querySelectorAll('[data-demodone]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.demodone,{status:'done'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo completed ✓'});}
@@ -2017,7 +2069,7 @@ function bind(){
   document.querySelectorAll('[data-resch]').forEach(b=>b.onclick=()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     const d=l&&l.demos.find(x=>x.id===b.dataset.resch);
-    S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;r();});
+    S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;S.editDemoId=null;S.demoTeamSel=d?[...(d.demoTeam||[])]:[];r();});
   document.querySelectorAll('[data-canceldemo]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.canceldemo,{status:'cancelled'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled.'});}
@@ -2259,8 +2311,19 @@ function bind(){
     }
     S.showLossModal=false;S.lossLeadId=null;await loadAll();};
   const obusy=document.getElementById('obusy');
-  if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.busyErr='';r();};
-  const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';r();};
+  if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';r();};
+  document.querySelectorAll('[data-editbusy]').forEach(b=>b.onclick=()=>{
+    const id=b.dataset.editbusy;
+    if(!S.busyBlocks.find(x=>x.id===id))return;
+    S.showBusyModal=true;S.editBusyId=id;S.busyErr='';r();
+  });
+  const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;r();};
+  const bdel=document.getElementById('bdel');
+  if(bdel)bdel.onclick=async()=>{
+    if(!S.editBusyId)return;
+    await dbDelete('tracker_busy_blocks',S.editBusyId);
+    S.showBusyModal=false;S.editBusyId=null;S.busyErr='';await loadAll();
+  };
   const bsv=document.getElementById('bsv');
   if(bsv)bsv.onclick=async()=>{
     const staff=S.isAdmin?(document.getElementById('bstaff')?.value||S.user):S.user;
@@ -2270,10 +2333,10 @@ function bind(){
     const label=document.getElementById('blabel').value.trim()||type;
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
-    await dbPost('tracker_busy_blocks',{staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type});
-    S.showBusyModal=false;S.busyErr='';await loadAll();};
-
-  window.__delBusy=async(id)=>{await dbDelete('tracker_busy_blocks',id);await loadAll();};
+    const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type};
+    if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
+    else{await dbPost('tracker_busy_blocks',payload);}
+    S.showBusyModal=false;S.busyErr='';S.editBusyId=null;await loadAll();};
 
   // Upsells
   document.querySelectorAll('[data-uf]').forEach(f=>f.onclick=()=>{S.upsellFilter=f.dataset.uf;r();});
