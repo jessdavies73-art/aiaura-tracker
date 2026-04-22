@@ -1331,9 +1331,10 @@ function calendarTab(){
           const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
           return`<div class="cal-cell ${isT?'today-col':''}">
             ${evts.map(e=>{
+              const flash=`this.style.background='red';setTimeout(()=>{this.style.background=''},500);`;
               const attrs=e.type==='demo'
-                ?`onclick="event.stopPropagation();console.log('inline demo click',this);window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
-                :`onclick="event.stopPropagation();console.log('inline busy click',this);window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
+                ?`onclick="${flash}console.log('inline demo click',this);try{event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')}catch(err){console.error('demo onclick err',err)}" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
+                :`onclick="${flash}console.log('inline busy click',this);try{event.stopPropagation();window.__editBusy('${e.id}')}catch(err){console.error('busy onclick err',err)}" data-editbusy="${e.id}"`;
               return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}border:2px solid red !important;" title="${e.label}" ${attrs}>
                 <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
               </div>`;
