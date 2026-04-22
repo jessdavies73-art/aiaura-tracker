@@ -1331,10 +1331,10 @@ function calendarTab(){
           const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
           return`<div class="cal-cell ${isT?'today-col':''}">
             ${evts.map(e=>{
-              const click=e.type==='demo'
-                ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')"`
-                :`onclick="event.stopPropagation();window.__editBusy('${e.id}')"`;
-              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${click}>
+              const attrs=e.type==='demo'
+                ?`onclick="event.stopPropagation();console.log('inline demo click',this);window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
+                :`onclick="event.stopPropagation();console.log('inline busy click',this);window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
+              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}border:2px solid red !important;" title="${e.label}" ${attrs}>
                 <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
               </div>`;
             }).join('')}
@@ -2032,9 +2032,11 @@ function bind(){
     r();
   };
   window.__editDemo=(demoId,leadId)=>{
+    console.log('editDemo called',demoId,leadId);
     const l=S.leads.find(x=>x.id===leadId);
     const d=l&&l.demos.find(x=>x.id===demoId);
-    if(!l||!d)return;
+    console.log('editDemo lookup',{lead:!!l,demo:!!d,leadsCount:S.leads.length});
+    if(!l||!d){console.warn('editDemo: lead or demo not found — aborting');return;}
     S.showDemoModal=true;
     S.demoLeadId=leadId;
     S.editDemoLeadId=leadId;
@@ -2043,6 +2045,11 @@ function bind(){
     S.demoTeamSel=[...(d.demoTeam||[])];
     r();
   };
+  document.querySelectorAll('[data-editdemo]').forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    console.log('data-editdemo click fallback fired');
+    window.__editDemo(b.dataset.editdemo,b.dataset.editleadid);
+  });
   const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();};
   const ddel=document.getElementById('ddel');
   if(ddel)ddel.onclick=async()=>{
@@ -2320,12 +2327,20 @@ function bind(){
   const obusy=document.getElementById('obusy');
   if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';r();};
   window.__editBusy=(id)=>{
-    if(!S.busyBlocks.find(x=>x.id===id))return;
+    console.log('editBusy called',id);
+    const bl=S.busyBlocks.find(x=>x.id===id);
+    console.log('editBusy lookup',{found:!!bl,blocksCount:S.busyBlocks.length});
+    if(!bl){console.warn('editBusy: block not found — aborting');return;}
     S.editBusyId=id;
     S.showBusyModal=true;
     S.busyErr='';
     r();
   };
+  document.querySelectorAll('[data-editbusy]').forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    console.log('data-editbusy click fallback fired');
+    window.__editBusy(b.dataset.editbusy);
+  });
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;r();};
   const bdel=document.getElementById('bdel');
   if(bdel)bdel.onclick=async()=>{
