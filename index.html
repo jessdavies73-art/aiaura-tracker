@@ -603,7 +603,8 @@ async function loadAll(){
       id:b.id,staff:b.staff,
       start:utcToLocal(b.start_dt),
       end:utcToLocal(b.end_dt),
-      label:b.label||'',type:b.type||'busy'
+      label:b.label||'',type:b.type||'busy',
+      busyTeam:b.busy_team||[]
     }));
     S.signups=(signups||[]).map(sg=>({
       id:sg.id,staff:sg.staff,leadId:sg.lead_id,company:sg.company||'',
@@ -626,7 +627,7 @@ let S={
   loggedIn:false,isAdmin:false,user:null,loading:false,
   loginStep:'choose',loginErr:'',_pendingUser:'',
   tab:'alerts',filter:'All',upsellFilter:'All',commFilter:'All',qv:null,
-  calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',editBusyId:null,
+  calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',editBusyId:null,busyTeamSel:[],
   showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,showLossModal:false,
   editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,editDemoId:null,editDemoLeadId:null,demoTeamSel:[],signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
   mProds:[],mErr:'',demoProdsSel:[],demoProdErr:'',upsellProds:[],upsellErr:'',
@@ -1356,7 +1357,16 @@ function busyModal(){
   const staffVal=editing?existing.staff:S.user;
   const STAFF_OPTS=[...STAFF,'Jessie'];
   const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
+  const TEAM=['Ricky','Katherine','Ramsey','Jessie'];
+  const selectedTeam=Array.isArray(S.busyTeamSel)?S.busyTeamSel:[];
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  const teamButtons=TEAM.map(n=>{
+    const sel=selectedTeam.includes(n);
+    const bg=sel?'rgba(59,191,173,0.15)':'rgba(255,255,255,0.04)';
+    const bd=sel?'#3bbfad':'rgba(255,255,255,0.15)';
+    const col=sel?'#3bbfad':'var(--text-secondary)';
+    return`<button type="button" onclick="window.__toggleBusyTeam('${n}')" style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:8px;background:${bg};border:1px solid ${bd};cursor:pointer;font-size:13px;color:${col};font-family:var(--font)"><span style="display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid ${sel?'#3bbfad':'rgba(255,255,255,0.35)'};background:${sel?'#3bbfad':'transparent'};color:#0c1e3c;font-size:11px;font-weight:700;line-height:14px;text-align:center">${sel?'✓':''}</span>${n}</button>`;
+  }).join('');
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit busy block':'Block out time'}</h3>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?'Update or delete this busy block.':'Add a busy block — visible to everyone on the shared calendar.'}</div>
@@ -1368,6 +1378,10 @@ function busyModal(){
       <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${esc(endVal)}"/></div>
     </div>
     <div class="form-field"><label class="form-label">What is it?</label><select id="btype">${TYPES.map(([v,lbl])=>`<option value="${v}"${v===typeVal?' selected':''}>${lbl}</option>`).join('')}</select></div>
+    <div class="form-field">
+      <label class="form-label">Who else is joining? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
+    </div>
     <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
@@ -2326,25 +2340,30 @@ function bind(){
     }
     S.showLossModal=false;S.lossLeadId=null;await loadAll();};
   const obusy=document.getElementById('obusy');
-  if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';r();};
+  if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';S.busyTeamSel=[];r();};
+  window.__toggleBusyTeam=(n)=>{
+    S.busyTeamSel=S.busyTeamSel.includes(n)?S.busyTeamSel.filter(x=>x!==n):[...S.busyTeamSel,n];
+    r();
+  };
   window.__editBusy=(id)=>{
     const bl=S.busyBlocks.find(x=>x.id===id);
     if(!bl)return;
     S.editBusyId=id;
     S.showBusyModal=true;
     S.busyErr='';
+    S.busyTeamSel=[...(bl.busyTeam||[])];
     r();
   };
   document.querySelectorAll('[data-editbusy]').forEach(b=>b.onclick=(e)=>{
     e.stopPropagation();
     window.__editBusy(b.dataset.editbusy);
   });
-  const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;r();};
+  const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];r();};
   const bdel=document.getElementById('bdel');
   if(bdel)bdel.onclick=async()=>{
     if(!S.editBusyId)return;
     await dbDelete('tracker_busy_blocks',S.editBusyId);
-    S.showBusyModal=false;S.editBusyId=null;S.busyErr='';await loadAll();
+    S.showBusyModal=false;S.editBusyId=null;S.busyErr='';S.busyTeamSel=[];await loadAll();
   };
   const bsv=document.getElementById('bsv');
   if(bsv)bsv.onclick=async()=>{
@@ -2355,10 +2374,10 @@ function bind(){
     const label=document.getElementById('blabel').value.trim()||type;
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
-    const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type};
+    const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type,busy_team:S.busyTeamSel};
     if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
     else{await dbPost('tracker_busy_blocks',payload);}
-    S.showBusyModal=false;S.busyErr='';S.editBusyId=null;await loadAll();};
+    S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];await loadAll();};
 
   // Upsells
   document.querySelectorAll('[data-uf]').forEach(f=>f.onclick=()=>{S.upsellFilter=f.dataset.uf;r();});
