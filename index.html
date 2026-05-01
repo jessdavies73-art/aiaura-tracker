@@ -351,6 +351,9 @@ function roomForDemo(lead,demo){
   const prods=(demo&&Array.isArray(demo.demoProds)&&demo.demoProds.length)?demo.demoProds:(lead?lead.products:[]);
   return roomForProducts(prods);
 }
+function fmtInviteDate(dt){return new Date(dt).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
+function fmtInviteTime(dt){return new Date(dt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
+const SEND_INVITE_URL='https://aiaura-tracker-api.vercel.app/api/send-invite';
 const STATUSES=['Contacted','Demo booked','Converted','Lost'];
 const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
 const LEAD_SOURCES=['LinkedIn','Referral','Networking event','Cold outreach','Website','Email campaign','Phone call','Other'];
@@ -1153,7 +1156,7 @@ function leadsTab(vis){
                   ${d.status==='upcoming'?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:rgba(59,191,173,0.06);border:1px solid rgba(59,191,173,0.25);border-radius:8px;padding:8px 10px">
                     <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Demo room:</span>
                     <a href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="font-size:12px;color:#3bbfad;text-decoration:none;word-break:break-all;flex:1;min-width:140px">${roomForDemo(l,d)}</a>
-                    <a class="demo-action-btn done-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="text-decoration:none;font-size:11px">🎥 Join</a>
+                    <a class="demo-action-btn done-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="text-decoration:none;font-size:11px">🎥 Join Demo Room</a>
                     <button class="demo-action-btn" style="font-size:11px" data-copyroom="${roomForDemo(l,d)}">📋 Copy</button>
                   </div>`:''}
                   ${(d.demoNotes||[]).length>0?`<div style="margin-top:8px">${(d.demoNotes||[]).map(n=>`<div class="note-card" style="border-color:rgba(250,199,117,0.35)"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}</div>`:''}
@@ -1161,12 +1164,12 @@ function leadsTab(vis){
                     <textarea placeholder="${d.status==='upcoming'?'Add a pre-demo note...':'Add a note from this demo...'}" data-dni="${d.id}-${l.id}">${S.demoNoteInputs[d.id+'-'+l.id]||''}</textarea>
                     <button data-dnadd="${d.id}" data-lid="${l.id}">+ Note</button>
                   </div>
-                  ${d.status==='upcoming'?`<div class="demo-actions">
+                  ${d.status==='upcoming'?(()=>{const hasInviteEmails=(d.attendees||[]).some(a=>a&&a.email&&String(a.email).trim());return`<div class="demo-actions">
                     <button class="demo-action-btn done-btn" data-demodone="${d.id}" data-lid="${l.id}">✓ Mark done</button>
                     <button class="demo-action-btn reschedule-btn" data-resch="${d.id}" data-lid="${l.id}">↺ Reschedule</button>
-                    <button class="demo-action-btn" style="border-color:rgba(116,185,255,0.4);color:#74b9ff;background:rgba(116,185,255,0.08)" data-sendinvite="${d.id}" data-lid="${l.id}">✉ Send invite</button>
+                    ${hasInviteEmails?`<button class="demo-action-btn" style="border-color:rgba(116,185,255,0.4);color:#74b9ff;background:rgba(116,185,255,0.08)" data-sendinvite="${d.id}" data-lid="${l.id}">✉ Send invite</button>`:''}
                     <button class="demo-action-btn cancel-btn" data-canceldemo="${d.id}" data-lid="${l.id}">✕ Cancel</button>
-                  </div>`:''}
+                  </div>`;})():''}
                 </div>`).join('')}
               </div>`:''}
               ${(l.reminders||[]).length>0?`<div class="activity-section">
@@ -2207,21 +2210,35 @@ function bind(){
     try{await navigator.clipboard.writeText(url);const orig=b.textContent;b.textContent='✓ Copied';setTimeout(()=>{b.textContent=orig;},1500);}
     catch(e){const orig=b.textContent;b.textContent='✗ Failed';setTimeout(()=>{b.textContent=orig;},1500);}
   });
-  document.querySelectorAll('[data-sendinvite]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-sendinvite]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     const d=l&&l.demos.find(x=>x.id===b.dataset.sendinvite);
     if(!l||!d)return;
-    const url=roomForDemo(l,d);
-    const dtObj=new Date(d.dt);
-    const dateStr=dtObj.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-    const timeStr=dtObj.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
-    const atts=Array.isArray(d.attendees)?d.attendees:[];
-    const emails=atts.map(a=>a.email).filter(Boolean);
-    const to=emails.length?emails.join(','):(l.contactEmail||'');
-    const firstName=(atts[0]&&atts[0].name)||l.contactName||'there';
-    const subject=`Demo confirmed - ${dateStr} ${timeStr}`;
-    const body=`Hi ${firstName},\n\nLooking forward to speaking with you. Here are your demo details.\n\nDate: ${dateStr}\nTime: ${timeStr}\nJoin here: ${url}\n\nSee you then,\n${l.staff}`;
-    window.location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    const atts=(Array.isArray(d.attendees)?d.attendees:[]).filter(a=>a&&a.email&&String(a.email).trim());
+    if(!atts.length){b.textContent='✗ No attendee emails';setTimeout(()=>{b.textContent='✉ Send invite';},1800);return;}
+    const product=(d.demoProds&&d.demoProds.length?d.demoProds:l.products)[0]||'';
+    const meetUrl=roomForDemo(l,d);
+    const demoDate=fmtInviteDate(d.dt);
+    const demoTime=fmtInviteTime(d.dt);
+    const orig=b.textContent;
+    b.disabled=true;b.textContent='Sending…';
+    try{
+      const res=await fetch(SEND_INVITE_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({attendees:atts.map(a=>({name:a.name||'',email:String(a.email).trim()})),staffName:l.staff,product,demoDate,demoTime,meetUrl})});
+      const data=await res.json().catch(()=>({}));
+      if(!res.ok||data&&data.success===false){
+        const msg=(data&&data.error)||`Send failed (${res.status})`;
+        b.textContent='✗ '+msg.slice(0,30);
+        setTimeout(()=>{b.disabled=false;b.textContent=orig;},2500);
+        return;
+      }
+      const sent=data&&typeof data.sent==='number'?data.sent:atts.length;
+      b.textContent=`✓ Invite sent (${sent})`;
+      await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo invite emailed to ${atts.map(a=>a.email).join(', ')}`});
+      setTimeout(()=>{b.disabled=false;b.textContent=orig;loadAll();},1800);
+    }catch(err){
+      b.textContent='✗ Network error';
+      setTimeout(()=>{b.disabled=false;b.textContent=orig;},2000);
+    }
   });
   document.querySelectorAll('[data-resch]').forEach(b=>b.onclick=()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
