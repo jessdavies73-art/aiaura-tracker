@@ -581,7 +581,7 @@ async function loadAll(){
       dbGet('tracker_demos','order=created_at.asc'),
       dbGet('tracker_reminders','order=created_at.asc'),
       dbGet('tracker_upsells','order=created_at.asc'),
-      dbGet('tracker_busy_blocks','order=created_at.asc'),
+      dbGet('tracker_busy_blocks','select=*&order=created_at.asc&limit=10000'),
       dbGet('tracker_signups','order=created_at.asc').catch(()=>[]),
       dbGet('tracker_bonuses','order=created_at.asc').catch(()=>[]),
     ]);
@@ -1348,7 +1348,7 @@ function calendarTab(){
                 ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
                 :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
               const teamSuffix=(Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
-              const meetIcon=e.type==='demo'&&e.meetLink?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join Google Meet" style="text-decoration:none">🎥</a>`:'';
+              const meetIcon=e.type==='demo'&&e.meetLink?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join Google Meet — ${e.meetLink}" style="display:inline-block;margin-left:4px;padding:0 4px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥 Meet</a>`:'';
               const titleAttr=(Array.isArray(e.team)&&e.team.length)?`${e.label} (with ${e.team.join(', ')})`:e.label;
               return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${titleAttr}" ${attrs}>
                 <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}${teamSuffix}${meetIcon}
