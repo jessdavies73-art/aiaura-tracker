@@ -320,7 +320,6 @@
   .staff-dot { width: 8px; height: 8px; border-radius: 50%; }
   .ricky-dot { background: #3bbfad; }
   .katherine-dot { background: #a29bfe; }
-  .ramsey-dot { background: #fac775; }
   .jessie-dot { background: #74b9ff; }
 
 </style>
@@ -1268,21 +1267,26 @@ function calendarTab(){
     return d.toDateString()===day.toDateString();
   }
 
+  const me=S.user;
+  const visibleToMe=(staff,team)=>staff===me||(Array.isArray(team)&&team.includes(me));
+
   function eventsForDay(day){
     const evts=[];
     S.leads.forEach(l=>{
       (l.demos||[]).filter(d=>d.status==='upcoming').forEach(d=>{
-        if(sameLocalDay(new Date(d.dt),day)){
-          evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,demoId:d.id,leadId:l.id,color:STAFF_COLORS[l.staff]||'#fac775'});
-        }
+        if(!sameLocalDay(new Date(d.dt),day))return;
+        const team=Array.isArray(d.demoTeam)?d.demoTeam:[];
+        if(!visibleToMe(l.staff,team))return;
+        evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,color:STAFF_COLORS[l.staff]||'#fac775'});
       });
     });
     S.busyBlocks.forEach(b=>{
       const bs=new Date(b.start);
-      if(sameLocalDay(bs,day)){
-        const be=new Date(b.end);
-        evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:`${b.staff}: ${b.label}`,staff:b.staff,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
-      }
+      if(!sameLocalDay(bs,day))return;
+      const team=Array.isArray(b.busyTeam)?b.busyTeam:[];
+      if(!visibleToMe(b.staff,team))return;
+      const be=new Date(b.end);
+      evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:`${b.staff}: ${b.label}`,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
     });
     return evts;
   }
@@ -1335,8 +1339,10 @@ function calendarTab(){
               const attrs=e.type==='demo'
                 ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
                 :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
-              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${e.label}" ${attrs}>
-                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}
+              const teamSuffix=(Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
+              const titleAttr=(Array.isArray(e.team)&&e.team.length)?`${e.label} (with ${e.team.join(', ')})`:e.label;
+              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${titleAttr}" ${attrs}>
+                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}${teamSuffix}
               </div>`;
             }).join('')}
           </div>`;
@@ -1975,6 +1981,36 @@ function remModal(){
     <div class="modal-actions"><button class="btn-cancel" id="rcm">Cancel</button><button class="btn-save" id="rsv">Save reminder</button></div>
   </div></div>`;}
 
+window.__editDemo=function(demoId,leadId){
+  const l=S.leads.find(x=>x.id===leadId);
+  const d=l&&l.demos.find(x=>x.id===demoId);
+  if(!l||!d)return;
+  S.showDemoModal=true;
+  S.demoLeadId=leadId;
+  S.editDemoLeadId=leadId;
+  S.editDemoId=demoId;
+  S.rescheduleId=null;
+  S.demoTeamSel=[...(d.demoTeam||[])];
+  r();
+};
+window.__editBusy=function(id){
+  const bl=S.busyBlocks.find(x=>x.id===id);
+  if(!bl)return;
+  S.editBusyId=id;
+  S.showBusyModal=true;
+  S.busyErr='';
+  S.busyTeamSel=[...(bl.busyTeam||[])];
+  r();
+};
+window.__toggleDemoTeam=function(n){
+  S.demoTeamSel=S.demoTeamSel.includes(n)?S.demoTeamSel.filter(x=>x!==n):[...S.demoTeamSel,n];
+  r();
+};
+window.__toggleBusyTeam=function(n){
+  S.busyTeamSel=S.busyTeamSel.includes(n)?S.busyTeamSel.filter(x=>x!==n):[...S.busyTeamSel,n];
+  r();
+};
+
 function bind(){
   document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{
     const n=b.dataset.n;
@@ -2045,26 +2081,6 @@ function bind(){
     S.demoNoteInputs[key]='';await loadAll();});
   document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();});
   document.querySelectorAll('[data-or]').forEach(b=>b.onclick=()=>{S.showReminderModal=true;S.reminderLeadId=b.dataset.or;r();});
-  window.__toggleDemoTeam=(n)=>{
-    S.demoTeamSel=S.demoTeamSel.includes(n)?S.demoTeamSel.filter(x=>x!==n):[...S.demoTeamSel,n];
-    r();
-  };
-  window.__editDemo=(demoId,leadId)=>{
-    const l=S.leads.find(x=>x.id===leadId);
-    const d=l&&l.demos.find(x=>x.id===demoId);
-    if(!l||!d)return;
-    S.showDemoModal=true;
-    S.demoLeadId=leadId;
-    S.editDemoLeadId=leadId;
-    S.editDemoId=demoId;
-    S.rescheduleId=null;
-    S.demoTeamSel=[...(d.demoTeam||[])];
-    r();
-  };
-  document.querySelectorAll('[data-editdemo]').forEach(b=>b.onclick=(e)=>{
-    e.stopPropagation();
-    window.__editDemo(b.dataset.editdemo,b.dataset.editleadid);
-  });
   const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];r();};
   const ddel=document.getElementById('ddel');
   if(ddel)ddel.onclick=async()=>{
@@ -2339,23 +2355,6 @@ function bind(){
     S.showLossModal=false;S.lossLeadId=null;await loadAll();};
   const obusy=document.getElementById('obusy');
   if(obusy)obusy.onclick=()=>{S.showBusyModal=true;S.editBusyId=null;S.busyErr='';S.busyTeamSel=[];r();};
-  window.__toggleBusyTeam=(n)=>{
-    S.busyTeamSel=S.busyTeamSel.includes(n)?S.busyTeamSel.filter(x=>x!==n):[...S.busyTeamSel,n];
-    r();
-  };
-  window.__editBusy=(id)=>{
-    const bl=S.busyBlocks.find(x=>x.id===id);
-    if(!bl)return;
-    S.editBusyId=id;
-    S.showBusyModal=true;
-    S.busyErr='';
-    S.busyTeamSel=[...(bl.busyTeam||[])];
-    r();
-  };
-  document.querySelectorAll('[data-editbusy]').forEach(b=>b.onclick=(e)=>{
-    e.stopPropagation();
-    window.__editBusy(b.dataset.editbusy);
-  });
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];r();};
   const bdel=document.getElementById('bdel');
   if(bdel)bdel.onclick=async()=>{
