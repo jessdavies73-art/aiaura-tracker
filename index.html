@@ -458,13 +458,6 @@ function isPast(ds){return new Date(ds)<new Date();}
 const now=new Date();
 const futDt=new Date(now.getTime()+172800000).toISOString().slice(0,16);
 
-function genMeetCode(){
-  const a='abcdefghijklmnopqrstuvwxyz';
-  const seg=n=>Array.from({length:n},()=>a[Math.floor(Math.random()*a.length)]).join('');
-  return`${seg(3)}-${seg(4)}-${seg(3)}`;
-}
-function genMeetLink(){return`https://meet.google.com/${genMeetCode()}`;}
-
 // ── SUPABASE ────────────────────────────────────────────────────────────────
 const SB_URL='https://yionbkntbiferdfjpout.supabase.co';
 const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlpb25ia250YmlmZXJkZmpwb3V0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MzgzODcsImV4cCI6MjA5MDUxNDM4N30.l2OMXjMddALIAl70Ec2uDQs5jEO5U79nASjrb5h0bQM';
@@ -1975,12 +1968,13 @@ function demoModal(){
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
     </div>
     <div class="form-field">
-      <label class="form-label">Google Meet link <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+      <label class="form-label">Meeting link (Google Meet, Zoom, Teams etc) <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="url" id="dmeet" value="${escAttr(meetValue)}" placeholder="https://meet.google.com/abc-defg-hij" style="flex:1;min-width:220px"/>
-        <button type="button" id="dmeetgen" class="action-btn" style="font-size:12px;white-space:nowrap">🎥 Generate</button>
+        <input type="url" id="dmeet" value="${escAttr(meetValue)}" placeholder="Paste meeting URL" style="flex:1;min-width:220px"/>
         ${meetValue?`<a href="${escAttr(meetValue)}" target="_blank" rel="noopener" class="action-btn" style="font-size:12px;background:rgba(59,191,173,0.12);border-color:rgba(59,191,173,0.35);color:#3bbfad;text-decoration:none">↗ Open</a>`:''}
+        ${meetValue?`<button type="button" id="dmeetcopy" class="action-btn" style="font-size:12px;white-space:nowrap">📋 Copy</button>`:''}
       </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Create a meeting in Google Meet or Zoom and paste the link here</div>
     </div>
     <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${noteValue}</textarea></div>
     <div class="modal-actions">
@@ -2110,15 +2104,15 @@ function bind(){
     if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled from calendar.'});
     S.showDemoModal=false;S.editDemoId=null;S.editDemoLeadId=null;S.rescheduleId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;await loadAll();
   };
-  const dmeetgen=document.getElementById('dmeetgen');
-  if(dmeetgen)dmeetgen.onclick=()=>{
-    const cur=document.getElementById('dmeet')?.value||'';
-    if(cur&&!confirm('Replace the existing Meet link with a new one?'))return;
-    S.demoMeetLink=genMeetLink();
-    r();
-  };
   const dmeet=document.getElementById('dmeet');
   if(dmeet)dmeet.oninput=()=>{S.demoMeetLink=dmeet.value;};
+  const dmeetcopy=document.getElementById('dmeetcopy');
+  if(dmeetcopy)dmeetcopy.onclick=async()=>{
+    const v=document.getElementById('dmeet')?.value||'';
+    if(!v)return;
+    try{await navigator.clipboard.writeText(v);dmeetcopy.textContent='✓ Copied';setTimeout(()=>{dmeetcopy.textContent='📋 Copy';},1500);}
+    catch(e){dmeetcopy.textContent='✗ Failed';setTimeout(()=>{dmeetcopy.textContent='📋 Copy';},1500);}
+  };
   const dsv=document.getElementById('dsv');
   if(dsv)dsv.onclick=async()=>{
     const l=S.leads.find(x=>x.id===S.demoLeadId);if(!l)return;
