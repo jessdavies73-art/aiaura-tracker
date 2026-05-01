@@ -587,7 +587,9 @@ async function loadAll(){
       notes:(notes||[]).filter(n=>n.lead_id===l.id).map(n=>({ts:n.ts,txt:n.txt,id:n.id})),
       demos:(demos||[]).filter(d=>d.lead_id===l.id).map(d=>({
         id:d.id,dt:utcToLocal(d.dt),note:d.note||'',demoProds:d.demo_prods||[],
-        demoNotes:d.demo_notes||[],demoTeam:d.demo_team||[],meetLink:d.meet_link||'',status:d.status||'upcoming'
+        demoNotes:d.demo_notes||[],demoTeam:d.demo_team||[],meetLink:d.meet_link||'',
+        attendees:Array.isArray(d.demo_attendees)?d.demo_attendees:[],
+        status:d.status||'upcoming'
       })),
       reminders:(reminders||[]).filter(r=>r.lead_id===l.id).map(r=>({
         id:r.id,dt:utcToLocal(r.dt),txt:r.txt,done:r.done||false
@@ -948,6 +950,7 @@ function alertsTab(alerts,ml){
             <div class="demo-day-client">${l.company||l.contactName||'Unknown client'}</div>
             <div class="demo-day-contact">${l.contactName?l.contactName+' ':''} ${l.contactPhone?'· '+l.contactPhone:''}${S.isAdmin?' · '+l.staff:''}</div>
             ${d.note?`<div class="demo-day-agenda">${d.note}</div>`:''}
+            ${(d.attendees||[]).length?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">👤 ${(d.attendees||[]).map(a=>a.name||a.email).filter(Boolean).join(', ')}</div>`:''}
             <div class="demo-day-products" style="margin-top:4px">${(d.demoProds||l.products||[]).map(p=>ptag(p)).join('')}</div>
           </div>
           <div class="demo-day-actions">
@@ -1126,6 +1129,7 @@ function leadsTab(vis){
                     </div>
                   </div>`:''}
                   ${d.note?`<div class="demo-note-text" style="margin-top:6px"><strong>Brief:</strong> ${d.note}</div>`:''}
+                  ${(d.attendees||[]).length>0?`<div style="margin-top:6px;font-size:11px;color:var(--text-secondary)"><strong style="color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;font-size:10px;font-weight:500">Attendees:</strong> ${(d.attendees||[]).map(a=>{const lbl=a.name||a.email;return a.email?`<a href="mailto:${a.email}" style="color:#74b9ff;text-decoration:none">${lbl}</a>`:lbl;}).join(', ')}</div>`:''}
                   ${(d.demoNotes||[]).length>0?`<div style="margin-top:8px">${(d.demoNotes||[]).map(n=>`<div class="note-card" style="border-color:rgba(250,199,117,0.35)"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}</div>`:''}
                   <div class="demo-note-form" style="margin-top:8px">
                     <textarea placeholder="${d.status==='upcoming'?'Add a pre-demo note...':'Add a note from this demo...'}" data-dni="${d.id}-${l.id}">${S.demoNoteInputs[d.id+'-'+l.id]||''}</textarea>
@@ -1278,7 +1282,7 @@ function calendarTab(){
         if(!sameLocalDay(new Date(d.dt),day))return;
         const team=Array.isArray(d.demoTeam)?d.demoTeam:[];
         if(!visibleToMe(l.staff,team))return;
-        evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,meetLink:d.meetLink||'',color:STAFF_COLORS[l.staff]||'#fac775'});
+        evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,meetLink:d.meetLink||'',attendees:Array.isArray(d.attendees)?d.attendees:[],color:STAFF_COLORS[l.staff]||'#fac775'});
       });
     });
     S.busyBlocks.forEach(b=>{
@@ -1341,10 +1345,15 @@ function calendarTab(){
                 ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
                 :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
               const teamSuffix=(Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
-              const meetIcon=e.type==='demo'&&e.meetLink?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join Google Meet — ${e.meetLink}" style="display:inline-block;margin-left:4px;padding:0 4px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥 Meet</a>`:'';
-              const titleAttr=(Array.isArray(e.team)&&e.team.length)?`${e.label} (with ${e.team.join(', ')})`:e.label;
+              const meetIcon=e.type==='demo'&&e.meetLink?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join meeting — ${e.meetLink}" style="display:inline-block;margin-left:4px;padding:0 4px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥 Join</a>`:'';
+              const attCount=Array.isArray(e.attendees)?e.attendees.length:0;
+              const attChip=attCount?` <span style="opacity:0.7;font-size:9px">· 👤${attCount}</span>`:'';
+              const attTitle=attCount?`\nAttendees: ${e.attendees.map(a=>a.name||a.email).filter(Boolean).join(', ')}`:'';
+              const titleParts=[e.label];
+              if(Array.isArray(e.team)&&e.team.length)titleParts.push(`with ${e.team.join(', ')}`);
+              const titleAttr=titleParts.join(' — ')+attTitle;
               return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${titleAttr}" ${attrs}>
-                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}${teamSuffix}${meetIcon}
+                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}${teamSuffix}${attChip}${meetIcon}
               </div>`;
             }).join('')}
           </div>`;
@@ -1947,6 +1956,7 @@ function demoModal(){
   const dtValue=existingDemo&&existingDemo.dt?existingDemo.dt:futDt;
   const noteValue=existingDemo&&existingDemo.note?existingDemo.note:'';
   const meetValue=S.demoMeetLink!==undefined?S.demoMeetLink:(existingDemo&&existingDemo.meetLink?existingDemo.meetLink:'');
+  const attendees=Array.isArray(S.demoAttendees)?S.demoAttendees:[];
   const TEAM=['Ricky','Katherine','Jessie'];
   const selectedTeam=Array.isArray(S.demoTeamSel)?S.demoTeamSel:[];
   const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
@@ -1975,6 +1985,17 @@ function demoModal(){
         ${meetValue?`<button type="button" id="dmeetcopy" class="action-btn" style="font-size:12px;white-space:nowrap">📋 Copy</button>`:''}
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Create a meeting in Google Meet or Zoom and paste the link here</div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Attendees from prospect <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
+      <div id="dattlist" style="display:flex;flex-direction:column;gap:6px">
+        ${attendees.map((a,i)=>`<div data-attrow="${i}" style="display:flex;gap:6px;align-items:center">
+          <input type="text" data-attfield="name" placeholder="Name" value="${escAttr(a.name||'')}" style="flex:1;min-width:120px"/>
+          <input type="email" data-attfield="email" placeholder="Email" value="${escAttr(a.email||'')}" style="flex:1.3;min-width:160px"/>
+          <button type="button" onclick="window.__removeDemoAttendee(${i})" title="Remove" style="background:rgba(255,118,117,0.08);border:1px solid rgba(255,118,117,0.35);color:#ff7675;border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:14px;line-height:1;font-family:var(--font)">×</button>
+        </div>`).join('')}
+      </div>
+      <button type="button" onclick="window.__addDemoAttendee()" class="action-btn" style="font-size:12px;margin-top:8px">+ Add attendee</button>
     </div>
     <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${noteValue}</textarea></div>
     <div class="modal-actions">
@@ -2005,6 +2026,7 @@ window.__editDemo=function(demoId,leadId){
   S.rescheduleId=null;
   S.demoTeamSel=[...(d.demoTeam||[])];
   S.demoMeetLink=d.meetLink||'';
+  S.demoAttendees=Array.isArray(d.attendees)?d.attendees.map(a=>({name:a.name||'',email:a.email||''})):[];
   r();
 };
 window.__editBusy=function(id){
@@ -2022,6 +2044,24 @@ window.__toggleDemoTeam=function(n){
 };
 window.__toggleBusyTeam=function(n){
   S.busyTeamSel=S.busyTeamSel.includes(n)?S.busyTeamSel.filter(x=>x!==n):[...S.busyTeamSel,n];
+  r();
+};
+function readAttendeesFromDom(){
+  const rows=Array.from(document.querySelectorAll('[data-attrow]'));
+  return rows.map(row=>({
+    name:(row.querySelector('[data-attfield="name"]')?.value||'').trim(),
+    email:(row.querySelector('[data-attfield="email"]')?.value||'').trim()
+  }));
+}
+window.__addDemoAttendee=function(){
+  const cur=readAttendeesFromDom();
+  S.demoAttendees=[...cur,{name:'',email:''}];
+  r();
+};
+window.__removeDemoAttendee=function(i){
+  const cur=readAttendeesFromDom();
+  cur.splice(i,1);
+  S.demoAttendees=cur;
   r();
 };
 
@@ -2067,7 +2107,7 @@ function bind(){
     S.showModal=false;S._mSnap={};
     await loadAll();
     if(savedStatus==='Demo booked'&&(newLeadId||S.editId)){
-      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;r();
+      S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];r();
     }};
   document.querySelectorAll('[data-qv]').forEach(b=>b.onclick=()=>{
     S.qv=S.qv===b.dataset.qv?null:b.dataset.qv;r();});
@@ -2093,16 +2133,16 @@ function bind(){
       await dbPost('tracker_notes',{lead_id:lid,ts:nowTs(),txt:`Demo note: ${txt}`});
     }
     S.demoNoteInputs[key]='';await loadAll();});
-  document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;r();});
+  document.querySelectorAll('[data-od]').forEach(b=>b.onclick=()=>{S.showDemoModal=true;S.demoLeadId=b.dataset.od;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];r();});
   document.querySelectorAll('[data-or]').forEach(b=>b.onclick=()=>{S.showReminderModal=true;S.reminderLeadId=b.dataset.or;r();});
-  const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;r();};
+  const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];r();};
   const ddel=document.getElementById('ddel');
   if(ddel)ddel.onclick=async()=>{
     if(!S.editDemoId)return;
     const l=S.leads.find(x=>x.id===S.demoLeadId);
     await dbPatch('tracker_demos',S.editDemoId,{status:'cancelled'});
     if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled from calendar.'});
-    S.showDemoModal=false;S.editDemoId=null;S.editDemoLeadId=null;S.rescheduleId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;await loadAll();
+    S.showDemoModal=false;S.editDemoId=null;S.editDemoLeadId=null;S.rescheduleId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];await loadAll();
   };
   const dmeet=document.getElementById('dmeet');
   if(dmeet)dmeet.oninput=()=>{S.demoMeetLink=dmeet.value;};
@@ -2118,19 +2158,20 @@ function bind(){
     const l=S.leads.find(x=>x.id===S.demoLeadId);if(!l)return;
     const dt=document.getElementById('ddt').value;const note=document.getElementById('dnote').value.trim();
     const meetLink=(document.getElementById('dmeet')?.value||'').trim();
+    const attendees=readAttendeesFromDom().filter(a=>a.name||a.email);
     if(S.editDemoId){
-      await dbPatch('tracker_demos',S.editDemoId,{dt:saveLocalDt(dt),note,demo_team:S.demoTeamSel,meet_link:meetLink});
+      await dbPatch('tracker_demos',S.editDemoId,{dt:saveLocalDt(dt),note,demo_team:S.demoTeamSel,meet_link:meetLink,demo_attendees:attendees});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo updated: ${fmtDt(dt)}`});
     }else if(S.rescheduleId){
       await dbPatch('tracker_demos',S.rescheduleId,{status:'rescheduled'});
-      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,meet_link:meetLink,status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,meet_link:meetLink,demo_attendees:attendees,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo rescheduled to ${fmtDt(dt)}`});
       S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`resch-${Date.now()}`,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id}];
     }else{
-      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note,demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,meet_link:meetLink,status:'upcoming'});
+      await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note,demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,meet_link:meetLink,demo_attendees:attendees,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo booked: ${fmtDt(dt)}`});
     }
-    S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;await loadAll();};
+    S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];await loadAll();};
   document.querySelectorAll('[data-demodone]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.demodone,{status:'done'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo completed ✓'});}
@@ -2138,7 +2179,7 @@ function bind(){
   document.querySelectorAll('[data-resch]').forEach(b=>b.onclick=()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     const d=l&&l.demos.find(x=>x.id===b.dataset.resch);
-    S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=d?[...(d.demoTeam||[])]:[];S.demoMeetLink=d?(d.meetLink||''):undefined;r();});
+    S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=d?[...(d.demoTeam||[])]:[];S.demoMeetLink=d?(d.meetLink||''):undefined;S.demoAttendees=d&&Array.isArray(d.attendees)?d.attendees.map(a=>({name:a.name||'',email:a.email||''})):[];r();});
   document.querySelectorAll('[data-canceldemo]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.canceldemo,{status:'cancelled'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled.'});}
