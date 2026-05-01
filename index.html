@@ -336,6 +336,21 @@ const PIN='8876';
 const STAFF_PINS={Ricky:'2675',Katherine:'9247'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
 const PK={Linka:'linka',AIAURA:'aiaura',PRODICTA:'prodicta',Firelynx:'firelynx'};
+const MEET_ROOMS={
+  PRODICTA:'https://meet.jit.si/PRODICTADemos',
+  AIAURA:'https://meet.jit.si/AIAURASales',
+  Linka:'https://meet.jit.si/AIAURASales',
+  Firelynx:'https://meet.jit.si/AIAURASales'
+};
+function roomForProducts(prods){
+  const p=Array.isArray(prods)?prods:[];
+  if(p.includes('PRODICTA'))return MEET_ROOMS.PRODICTA;
+  return MEET_ROOMS.AIAURA;
+}
+function roomForDemo(lead,demo){
+  const prods=(demo&&Array.isArray(demo.demoProds)&&demo.demoProds.length)?demo.demoProds:(lead?lead.products:[]);
+  return roomForProducts(prods);
+}
 const STATUSES=['Contacted','Demo booked','Converted','Lost'];
 const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
 const LEAD_SOURCES=['LinkedIn','Referral','Networking event','Cold outreach','Website','Email campaign','Phone call','Other'];
@@ -671,7 +686,11 @@ function buildAlerts(){
     (S.rescheduleAlerts||[]).forEach(ra=>{
       if(!S.dismissedAlerts[ra.key]){
         if(ra.isAccelerator&&!S.isAdmin)return; // accelerator flags admin only
-        alerts.push({key:ra.key,type:ra.isAccelerator?'demo-contact':'overdue',icon:ra.isAccelerator?'🚀':'🔄',title:ra.isAccelerator?ra.msg:`Demo rescheduled — ${ra.company}`,sub:ra.isAccelerator?'AIAURA accelerator — check commission boost':`${ra.staff} rescheduled to ${fmtDt(ra.newDt)}`,leadId:ra.leadId});
+        if(ra.isBooked){
+          alerts.push({key:ra.key,type:'demo-contact',icon:'✅',title:`Demo booked — ${ra.company}`,sub:`${ra.staff} · ${fmtDt(ra.newDt)}`,leadId:ra.leadId,meetUrl:ra.meetUrl});
+          return;
+        }
+        alerts.push({key:ra.key,type:ra.isAccelerator?'demo-contact':'overdue',icon:ra.isAccelerator?'🚀':'🔄',title:ra.isAccelerator?ra.msg:`Demo rescheduled — ${ra.company}`,sub:ra.isAccelerator?'AIAURA accelerator — check commission boost':`${ra.staff} rescheduled to ${fmtDt(ra.newDt)}`,leadId:ra.leadId,meetUrl:ra.isAccelerator?undefined:ra.meetUrl});
       }
     });
   }
@@ -954,7 +973,7 @@ function alertsTab(alerts,ml){
             <div class="demo-day-products" style="margin-top:4px">${(d.demoProds||l.products||[]).map(p=>ptag(p)).join('')}</div>
           </div>
           <div class="demo-day-actions">
-            ${d.meetLink?`<a class="call-btn" href="${d.meetLink}" target="_blank" rel="noopener" style="background:rgba(59,191,173,0.12);border-color:rgba(59,191,173,0.4);color:#3bbfad">🎥 Join</a>`:''}
+            <a class="call-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="background:rgba(46,204,113,0.18);border-color:rgba(46,204,113,0.6);color:#2ecc71;font-weight:600">🎥 Join Demo Room</a>
             ${l.contactPhone?`<a class="call-btn" href="tel:${l.contactPhone}">📞 Call</a>`:''}
             ${l.contactEmail?`<a class="email-btn" href="mailto:${l.contactEmail}">✉ Email</a>`:''}
           </div>
@@ -1012,6 +1031,7 @@ function alertsTab(alerts,ml){
     ${otherAlerts.map(a=>`<div class="alert-card ${a.type}">
       <div class="alert-icon">${a.icon}</div>
       <div class="alert-body"><div class="alert-title">${a.title}</div><div class="alert-sub">${a.sub}</div>
+        ${a.meetUrl?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px"><span style="font-size:11px;color:var(--text-muted)">Your demo room:</span><a href="${a.meetUrl}" target="_blank" rel="noopener" style="font-size:12px;color:#3bbfad;text-decoration:none;word-break:break-all">${a.meetUrl}</a><button class="demo-action-btn" style="font-size:11px" data-copyroom="${a.meetUrl}">📋 Copy</button></div>`:''}
         ${a.remId?`<button class="rem-done-btn" style="margin-top:8px" data-markdone="${a.remId}" data-lid="${a.leadId}">Mark done</button>`:''}
       </div>
       <button class="alert-dismiss" data-dismiss="${a.key}">×</button>
@@ -1130,6 +1150,12 @@ function leadsTab(vis){
                   </div>`:''}
                   ${d.note?`<div class="demo-note-text" style="margin-top:6px"><strong>Brief:</strong> ${d.note}</div>`:''}
                   ${(d.attendees||[]).length>0?`<div style="margin-top:6px;font-size:11px;color:var(--text-secondary)"><strong style="color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;font-size:10px;font-weight:500">Attendees:</strong> ${(d.attendees||[]).map(a=>{const lbl=a.name||a.email;return a.email?`<a href="mailto:${a.email}" style="color:#74b9ff;text-decoration:none">${lbl}</a>`:lbl;}).join(', ')}</div>`:''}
+                  ${d.status==='upcoming'?`<div style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:rgba(59,191,173,0.06);border:1px solid rgba(59,191,173,0.25);border-radius:8px;padding:8px 10px">
+                    <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Demo room:</span>
+                    <a href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="font-size:12px;color:#3bbfad;text-decoration:none;word-break:break-all;flex:1;min-width:140px">${roomForDemo(l,d)}</a>
+                    <a class="demo-action-btn done-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="text-decoration:none;font-size:11px">🎥 Join</a>
+                    <button class="demo-action-btn" style="font-size:11px" data-copyroom="${roomForDemo(l,d)}">📋 Copy</button>
+                  </div>`:''}
                   ${(d.demoNotes||[]).length>0?`<div style="margin-top:8px">${(d.demoNotes||[]).map(n=>`<div class="note-card" style="border-color:rgba(250,199,117,0.35)"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}</div>`:''}
                   <div class="demo-note-form" style="margin-top:8px">
                     <textarea placeholder="${d.status==='upcoming'?'Add a pre-demo note...':'Add a note from this demo...'}" data-dni="${d.id}-${l.id}">${S.demoNoteInputs[d.id+'-'+l.id]||''}</textarea>
@@ -1138,6 +1164,7 @@ function leadsTab(vis){
                   ${d.status==='upcoming'?`<div class="demo-actions">
                     <button class="demo-action-btn done-btn" data-demodone="${d.id}" data-lid="${l.id}">✓ Mark done</button>
                     <button class="demo-action-btn reschedule-btn" data-resch="${d.id}" data-lid="${l.id}">↺ Reschedule</button>
+                    <button class="demo-action-btn" style="border-color:rgba(116,185,255,0.4);color:#74b9ff;background:rgba(116,185,255,0.08)" data-sendinvite="${d.id}" data-lid="${l.id}">✉ Send invite</button>
                     <button class="demo-action-btn cancel-btn" data-canceldemo="${d.id}" data-lid="${l.id}">✕ Cancel</button>
                   </div>`:''}
                 </div>`).join('')}
@@ -1282,7 +1309,7 @@ function calendarTab(){
         if(!sameLocalDay(new Date(d.dt),day))return;
         const team=Array.isArray(d.demoTeam)?d.demoTeam:[];
         if(!visibleToMe(l.staff,team))return;
-        evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,meetLink:d.meetLink||'',attendees:Array.isArray(d.attendees)?d.attendees:[],color:STAFF_COLORS[l.staff]||'#fac775'});
+        evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,meetLink:roomForDemo(l,d),attendees:Array.isArray(d.attendees)?d.attendees:[],color:STAFF_COLORS[l.staff]||'#fac775'});
       });
     });
     S.busyBlocks.forEach(b=>{
@@ -1955,7 +1982,7 @@ function demoModal(){
   const existingDemo=editing&&l?l.demos.find(x=>x.id===S.editDemoId):null;
   const dtValue=existingDemo&&existingDemo.dt?existingDemo.dt:futDt;
   const noteValue=existingDemo&&existingDemo.note?existingDemo.note:'';
-  const meetValue=S.demoMeetLink!==undefined?S.demoMeetLink:(existingDemo&&existingDemo.meetLink?existingDemo.meetLink:'');
+  const meetValue=l?roomForDemo(l,existingDemo):'';
   const attendees=Array.isArray(S.demoAttendees)?S.demoAttendees:[];
   const TEAM=['Ricky','Katherine','Jessie'];
   const selectedTeam=Array.isArray(S.demoTeamSel)?S.demoTeamSel:[];
@@ -1978,13 +2005,13 @@ function demoModal(){
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
     </div>
     <div class="form-field">
-      <label class="form-label">Meeting link (Google Meet, Zoom, Teams etc) <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <input type="url" id="dmeet" value="${escAttr(meetValue)}" placeholder="Paste meeting URL" style="flex:1;min-width:220px"/>
-        ${meetValue?`<a href="${escAttr(meetValue)}" target="_blank" rel="noopener" class="action-btn" style="font-size:12px;background:rgba(59,191,173,0.12);border-color:rgba(59,191,173,0.35);color:#3bbfad;text-decoration:none">↗ Open</a>`:''}
+      <label class="form-label">Demo room <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(auto-assigned by product)</span></label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:rgba(59,191,173,0.06);border:1px solid rgba(59,191,173,0.3);border-radius:8px;padding:10px 12px">
+        <span id="dmeet" style="flex:1;min-width:200px;font-size:13px;color:#3bbfad;word-break:break-all">${escAttr(meetValue)}</span>
+        ${meetValue?`<a href="${escAttr(meetValue)}" target="_blank" rel="noopener" class="action-btn" style="font-size:12px;background:rgba(46,204,113,0.18);border-color:rgba(46,204,113,0.5);color:#2ecc71;text-decoration:none;font-weight:600">🎥 Join Demo Room</a>`:''}
         ${meetValue?`<button type="button" id="dmeetcopy" class="action-btn" style="font-size:12px;white-space:nowrap">📋 Copy</button>`:''}
       </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Create a meeting in Google Meet or Zoom and paste the link here</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:6px">Permanent Jitsi room — share this URL with the prospect</div>
     </div>
     <div class="form-field">
       <label class="form-label">Attendees from prospect <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
@@ -2144,11 +2171,9 @@ function bind(){
     if(l)await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled from calendar.'});
     S.showDemoModal=false;S.editDemoId=null;S.editDemoLeadId=null;S.rescheduleId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];await loadAll();
   };
-  const dmeet=document.getElementById('dmeet');
-  if(dmeet)dmeet.oninput=()=>{S.demoMeetLink=dmeet.value;};
   const dmeetcopy=document.getElementById('dmeetcopy');
   if(dmeetcopy)dmeetcopy.onclick=async()=>{
-    const v=document.getElementById('dmeet')?.value||'';
+    const v=document.getElementById('dmeet')?.textContent||'';
     if(!v)return;
     try{await navigator.clipboard.writeText(v);dmeetcopy.textContent='✓ Copied';setTimeout(()=>{dmeetcopy.textContent='📋 Copy';},1500);}
     catch(e){dmeetcopy.textContent='✗ Failed';setTimeout(()=>{dmeetcopy.textContent='📋 Copy';},1500);}
@@ -2157,7 +2182,7 @@ function bind(){
   if(dsv)dsv.onclick=async()=>{
     const l=S.leads.find(x=>x.id===S.demoLeadId);if(!l)return;
     const dt=document.getElementById('ddt').value;const note=document.getElementById('dnote').value.trim();
-    const meetLink=(document.getElementById('dmeet')?.value||'').trim();
+    const meetLink=roomForProducts(l.products);
     const attendees=readAttendeesFromDom().filter(a=>a.name||a.email);
     if(S.editDemoId){
       await dbPatch('tracker_demos',S.editDemoId,{dt:saveLocalDt(dt),note,demo_team:S.demoTeamSel,meet_link:meetLink,demo_attendees:attendees});
@@ -2166,16 +2191,38 @@ function bind(){
       await dbPatch('tracker_demos',S.rescheduleId,{status:'rescheduled'});
       await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note:note||'Rescheduled demo',demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,meet_link:meetLink,demo_attendees:attendees,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo rescheduled to ${fmtDt(dt)}`});
-      S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`resch-${Date.now()}`,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id}];
+      S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`resch-${Date.now()}`,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id,meetUrl:meetLink}];
     }else{
       await dbPost('tracker_demos',{lead_id:l.id,dt:saveLocalDt(dt),note,demo_prods:l.products,demo_notes:[],demo_team:S.demoTeamSel,meet_link:meetLink,demo_attendees:attendees,status:'upcoming'});
       await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Demo booked: ${fmtDt(dt)}`});
+      S.rescheduleAlerts=[...S.rescheduleAlerts,{key:`booked-${Date.now()}`,isBooked:true,company:l.company||l.contactName||'client',newDt:dt,staff:l.staff,leadId:l.id,meetUrl:meetLink}];
     }
     S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoMeetLink=undefined;S.demoAttendees=[];await loadAll();};
   document.querySelectorAll('[data-demodone]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.demodone,{status:'done'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo completed ✓'});}
     await loadAll();});
+  document.querySelectorAll('[data-copyroom]').forEach(b=>b.onclick=async()=>{
+    const url=b.dataset.copyroom;if(!url)return;
+    try{await navigator.clipboard.writeText(url);const orig=b.textContent;b.textContent='✓ Copied';setTimeout(()=>{b.textContent=orig;},1500);}
+    catch(e){const orig=b.textContent;b.textContent='✗ Failed';setTimeout(()=>{b.textContent=orig;},1500);}
+  });
+  document.querySelectorAll('[data-sendinvite]').forEach(b=>b.onclick=()=>{
+    const l=S.leads.find(x=>x.id===b.dataset.lid);
+    const d=l&&l.demos.find(x=>x.id===b.dataset.sendinvite);
+    if(!l||!d)return;
+    const url=roomForDemo(l,d);
+    const dtObj=new Date(d.dt);
+    const dateStr=dtObj.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+    const timeStr=dtObj.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    const atts=Array.isArray(d.attendees)?d.attendees:[];
+    const emails=atts.map(a=>a.email).filter(Boolean);
+    const to=emails.length?emails.join(','):(l.contactEmail||'');
+    const firstName=(atts[0]&&atts[0].name)||l.contactName||'there';
+    const subject=`Demo confirmed - ${dateStr} ${timeStr}`;
+    const body=`Hi ${firstName},\n\nLooking forward to speaking with you. Here are your demo details.\n\nDate: ${dateStr}\nTime: ${timeStr}\nJoin here: ${url}\n\nSee you then,\n${l.staff}`;
+    window.location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  });
   document.querySelectorAll('[data-resch]').forEach(b=>b.onclick=()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     const d=l&&l.demos.find(x=>x.id===b.dataset.resch);
