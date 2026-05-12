@@ -1303,7 +1303,8 @@ function calendarTab(){
   }
 
   const me=S.user;
-  const visibleToMe=(staff,team)=>S.isAdmin||staff===me||(Array.isArray(team)&&team.includes(me));
+  // All staff can see every booking — names are baked into each event label so the owner is always clear.
+  const visibleToMe=()=>true;
 
   function eventsForDay(day){
     const evts=[];
@@ -1311,7 +1312,6 @@ function calendarTab(){
       (l.demos||[]).filter(d=>d.status==='upcoming').forEach(d=>{
         if(!sameLocalDay(new Date(d.dt),day))return;
         const team=Array.isArray(d.demoTeam)?d.demoTeam:[];
-        if(!visibleToMe(l.staff,team))return;
         evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,meetLink:roomForDemo(l,d),attendees:Array.isArray(d.attendees)?d.attendees:[],color:STAFF_COLORS[l.staff]||'#fac775'});
       });
     });
@@ -1319,7 +1319,6 @@ function calendarTab(){
       const bs=new Date(b.start);
       if(!sameLocalDay(bs,day))return;
       const team=Array.isArray(b.busyTeam)?b.busyTeam:[];
-      if(!visibleToMe(b.staff,team))return;
       const be=new Date(b.end);
       evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:`${b.staff}: ${b.label}`,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
     });
