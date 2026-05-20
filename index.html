@@ -2500,9 +2500,14 @@ function bind(){
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
     const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type,busy_team:S.busyTeamSel};
-    if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
-    else{await dbPost('tracker_busy_blocks',payload);}
-    S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];await loadAll();};
+    try{
+      if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
+      else{await dbPost('tracker_busy_blocks',payload);}
+    }catch(e){console.error('Busy save failed',e);S.busyErr='Could not save — check connection.';r();return;}
+    S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];
+    await loadAll();
+    r();
+  };
 
   // Upsells
   document.querySelectorAll('[data-uf]').forEach(f=>f.onclick=()=>{S.upsellFilter=f.dataset.uf;r();});
