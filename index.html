@@ -330,8 +330,8 @@
 const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50},Founding:{c:30}};
 const UB=40;
 const STAFF=['Ricky','Katherine','Zach'];
-const COMM_STAFF=['Ricky','Katherine','Zach'];
-const PRODICTA_AIAURA_STAFF=['Ricky','Katherine','Zach'];
+const COMM_STAFF=['Ricky','Katherine'];
+const PRODICTA_AIAURA_STAFF=['Ricky','Katherine'];
 const PIN='8876';
 const STAFF_PINS={Ricky:'2675',Katherine:'9247',Zach:'2435'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
@@ -669,9 +669,10 @@ function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>visibleOwner
 function summ(){
   return STAFF.map(n=>{
     const ls=S.leads.filter(l=>l.staff===n);
+    const conv=ls.filter(l=>l.status==='Converted').length;
     const us=S.upsells.filter(u=>u.staff===n);
     const comm=us.reduce((a,u)=>a+u.commission,0);
-    return{name:n,leads:ls.length,upsells:us.length,comm};
+    return{name:n,leads:ls.length,conv,upsells:us.length,comm};
   }).sort((a,b)=>b.leads-a.leads);
 }
 
@@ -687,7 +688,7 @@ function isTomorrow(dtStr){
 function buildAlerts(){
   const alerts=[];
   // Reschedule + accelerator alerts
-  if(S.user==='Ricky'||S.user==='Katherine'||S.user==='Zach'||S.isAdmin){
+  if(S.user==='Ricky'||S.user==='Katherine'||S.isAdmin){
     (S.rescheduleAlerts||[]).forEach(ra=>{
       if(!S.dismissedAlerts[ra.key]){
         if(ra.isAccelerator&&!S.isAdmin)return; // accelerator flags admin only
@@ -1931,18 +1932,19 @@ function callScriptTab(){
 function lbTab(sm,mx){
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leaderboard</span></div>
-    ${sm.map((x,i)=>`<div class="lb-card">
+    ${sm.map((x,i)=>{const showComm=COMM_STAFF.includes(x.name);return`<div class="lb-card">
       <div class="lb-rank ${i===0?'gold':''}">${i+1}</div>
       <div style="flex:1">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
           <div class="lb-name">${x.name}</div>
           <div class="lb-leads">${x.leads} lead${x.leads!==1?'s':''}</div>
-          <div style="font-size:12px;color:#fac775">${x.upsells} upsell${x.upsells!==1?'s':''}</div>
-          <div class="lb-comm">£${x.comm}</div>
+          <div style="font-size:12px;color:#3bbfad">${x.conv} conversion${x.conv!==1?'s':''}</div>
+          ${showComm?`<div style="font-size:12px;color:#fac775">${x.upsells} upsell${x.upsells!==1?'s':''}</div>`:''}
+          ${showComm?`<div class="lb-comm">£${x.comm}</div>`:''}
         </div>
         <div class="lb-bar-wrap"><div class="lb-bar" style="width:${Math.round((x.leads/mx)*100)}%"></div></div>
       </div>
-    </div>`).join('')}
+    </div>`;}).join('')}
   </div>`;}
 
 function leadModal(){
