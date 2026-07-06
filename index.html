@@ -329,11 +329,11 @@
 <script>
 const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50},Founding:{c:30}};
 const UB=40;
-const STAFF=['Ricky','Katherine'];
-const COMM_STAFF=['Ricky','Katherine'];
-const PRODICTA_AIAURA_STAFF=['Ricky','Katherine'];
+const STAFF=['Ricky','Katherine','Zach'];
+const COMM_STAFF=['Ricky','Katherine','Zach'];
+const PRODICTA_AIAURA_STAFF=['Ricky','Katherine','Zach'];
 const PIN='8876';
-const STAFF_PINS={Ricky:'2675',Katherine:'9247'};
+const STAFF_PINS={Ricky:'2675',Katherine:'9247',Zach:'2435'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
 const PK={Linka:'linka',AIAURA:'aiaura',PRODICTA:'prodicta',Firelynx:'firelynx'};
 const MEET_ROOMS={
@@ -662,8 +662,10 @@ let S={
 
 
 function upsellComm(plan){return PLANS[plan]?.c||0;}
-function myLeads(){return S.isAdmin?S.leads:S.leads.filter(l=>l.staff===S.user);}
-function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>u.staff===S.user);}
+// Which staff members' books a given user can see. Zach sees his own leads plus Ricky and Katherine's (not Jessie's).
+function visibleOwners(user){return user==='Zach'?['Zach','Ricky','Katherine']:[user];}
+function myLeads(){return S.isAdmin?S.leads:S.leads.filter(l=>visibleOwners(S.user).includes(l.staff));}
+function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>visibleOwners(S.user).includes(u.staff));}
 function summ(){
   return STAFF.map(n=>{
     const ls=S.leads.filter(l=>l.staff===n);
@@ -685,7 +687,7 @@ function isTomorrow(dtStr){
 function buildAlerts(){
   const alerts=[];
   // Reschedule + accelerator alerts
-  if(S.user==='Ricky'||S.user==='Katherine'||S.isAdmin){
+  if(S.user==='Ricky'||S.user==='Katherine'||S.user==='Zach'||S.isAdmin){
     (S.rescheduleAlerts||[]).forEach(ra=>{
       if(!S.dismissedAlerts[ra.key]){
         if(ra.isAccelerator&&!S.isAdmin)return; // accelerator flags admin only
@@ -1285,7 +1287,7 @@ function upsellModal(){
   </div></div>`;}
 
 function calendarTab(){
-  const STAFF_COLORS={Ricky:'#3bbfad',Katherine:'#a29bfe',Jessie:'#74b9ff'};
+  const STAFF_COLORS={Ricky:'#3bbfad',Katherine:'#a29bfe',Zach:'#e17055',Jessie:'#74b9ff'};
   const HOURS=Array.from({length:14},(_,i)=>i+7); // 7am–8pm
   const today=new Date();today.setHours(0,0,0,0);
   const weekStart=new Date(today);
@@ -1403,7 +1405,7 @@ function busyModal(){
   const staffVal=editing?existing.staff:S.user;
   const STAFF_OPTS=[...STAFF,'Jessie'];
   const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
-  const TEAM=['Ricky','Katherine','Jessie'];
+  const TEAM=['Ricky','Katherine','Zach','Jessie'];
   const selectedTeam=Array.isArray(S.busyTeamSel)?S.busyTeamSel:[];
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   const teamButtons=TEAM.map(n=>{
@@ -1473,7 +1475,7 @@ function commissionTab(){
       <span class="sec-title">Commission</span>
       <button class="action-btn" id="ologsignup">+ Log sign-up</button>
     </div>
-    ${S.isAdmin?`<div class="filter-pills">${['All','Ricky','Katherine'].map(n=>`<button class="pill ${S.commFilter===n?'active':''}" data-cf="${n}">${n}</button>`).join('')}</div>`:''}
+    ${S.isAdmin?`<div class="filter-pills">${['All',...COMM_STAFF].map(n=>`<button class="pill ${S.commFilter===n?'active':''}" data-cf="${n}">${n}</button>`).join('')}</div>`:''}
 
     <!-- TOTALS -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:1.5rem">
@@ -1986,7 +1988,7 @@ function demoModal(){
   const noteValue=existingDemo&&existingDemo.note?existingDemo.note:'';
   const meetValue=l?roomForDemo(l,existingDemo):'';
   const attendees=Array.isArray(S.demoAttendees)?S.demoAttendees:[];
-  const TEAM=['Ricky','Katherine','Jessie'];
+  const TEAM=['Ricky','Katherine','Zach','Jessie'];
   const selectedTeam=Array.isArray(S.demoTeamSel)?S.demoTeamSel:[];
   const heading=S.rescheduleId?'Reschedule demo':(editing?'Edit demo':'Book a demo');
   const saveLabel=S.rescheduleId?'Reschedule':(editing?'Save changes':'Book demo');
