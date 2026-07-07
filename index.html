@@ -865,7 +865,7 @@ function appHtml(){
   const totalComm=mu.reduce((a,u)=>a+u.commission,0);
   const upDemos=ml.reduce((a,l)=>a+(l.demos||[]).filter(d=>d.status==='upcoming').length,0);
   const pendRems=ml.reduce((a,l)=>a+(l.reminders||[]).filter(r=>!r.done).length,0);
-  const vis=(S.isAdmin&&S.filter!=='All')?S.leads.filter(l=>l.staff===S.filter):ml;
+  const vis=((S.isAdmin||S.user==='Zach')&&S.filter!=='All')?ml.filter(l=>l.staff===S.filter):ml;
   const visU=(S.isAdmin&&S.upsellFilter!=='All')?S.upsells.filter(u=>u.staff===S.upsellFilter):mu;
   const sm=summ();const mx=Math.max(...sm.map(x=>x.leads),1);
 
@@ -1077,7 +1077,7 @@ function alertsTab(alerts,ml){
 function leadsTab(vis){
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leads log</span><div style="display:flex;gap:8px">${S.isAdmin?`<button class="action-btn" id="exportcsv" style="background:rgba(59,191,173,0.1);border-color:rgba(59,191,173,0.3)">↓ Export CSV</button>`:''}<button class="action-btn" id="om">+ Add lead</button></div></div>
-    ${S.isAdmin?`<div class="filter-pills">${['All',...STAFF].map(n=>`<button class="pill ${S.filter===n?'active':''}" data-f="${n}">${n}</button>`).join('')}</div>`:''}
+    ${(S.isAdmin||S.user==='Zach')?`<div class="filter-pills">${['All',...STAFF].map(n=>`<button class="pill ${S.filter===n?'active':''}" data-f="${n}">${n}</button>`).join('')}</div>`:''}
     ${vis.length===0?`<div class="empty-state"><div class="icon">📋</div><p>No leads yet — add your first one above.</p></div>`:`
     <div class="table-wrap"><table>
       <thead><tr>
