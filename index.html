@@ -662,10 +662,11 @@ let S={
 
 
 function upsellComm(plan){return PLANS[plan]?.c||0;}
-// Which staff members' books a given user can see. Zach sees his own leads plus Ricky and Katherine's (not Jessie's).
-function visibleOwners(user){return user==='Zach'?['Zach','Ricky','Katherine']:[user];}
+// Which staff members' leads a given user can see. All staff (Ricky, Katherine, Zach) see each other's leads; not Jessie's.
+function visibleOwners(user){return STAFF.includes(user)?STAFF.slice():[user];}
 function myLeads(){return S.isAdmin?S.leads:S.leads.filter(l=>visibleOwners(S.user).includes(l.staff));}
-function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>visibleOwners(S.user).includes(u.staff));}
+// Upsells stay private to their owner: each staff member only sees their own upsells.
+function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>u.staff===S.user);}
 function summ(){
   return STAFF.map(n=>{
     const ls=S.leads.filter(l=>l.staff===n);
@@ -865,7 +866,7 @@ function appHtml(){
   const totalComm=mu.reduce((a,u)=>a+u.commission,0);
   const upDemos=ml.reduce((a,l)=>a+(l.demos||[]).filter(d=>d.status==='upcoming').length,0);
   const pendRems=ml.reduce((a,l)=>a+(l.reminders||[]).filter(r=>!r.done).length,0);
-  const vis=((S.isAdmin||S.user==='Zach')&&S.filter!=='All')?ml.filter(l=>l.staff===S.filter):ml;
+  const vis=((S.isAdmin||STAFF.includes(S.user))&&S.filter!=='All')?ml.filter(l=>l.staff===S.filter):ml;
   const visU=(S.isAdmin&&S.upsellFilter!=='All')?S.upsells.filter(u=>u.staff===S.upsellFilter):mu;
   const sm=summ();const mx=Math.max(...sm.map(x=>x.leads),1);
 
@@ -882,7 +883,7 @@ function appHtml(){
     </div>
     <div class="content">
       <div class="metrics">
-        <div class="metric ${S.qv==='leads'?'active':''}" data-qv="leads"><div class="metric-label">Leads</div><div class="metric-value">${ml.length}</div><div class="metric-sub">${S.isAdmin?'all staff':'yours'}</div><div class="metric-hint">tap to view ↓</div></div>
+        <div class="metric ${S.qv==='leads'?'active':''}" data-qv="leads"><div class="metric-label">Leads</div><div class="metric-value">${ml.length}</div><div class="metric-sub">${S.isAdmin?'all staff':'team'}</div><div class="metric-hint">tap to view ↓</div></div>
         <div class="metric ${S.qv==='converted'?'active':''}" data-qv="converted"><div class="metric-label">Converted</div><div class="metric-value teal">${ml.filter(l=>l.status==='Converted').length}</div><div class="metric-sub">of ${ml.length} leads</div><div class="metric-hint">tap to view ↓</div></div>
         <div class="metric ${S.qv==='upsells'?'active':''}" data-qv="upsells"><div class="metric-label">Upsells logged</div><div class="metric-value amber">${mu.length}</div><div class="metric-sub">on-board clients</div><div class="metric-hint">tap to view ↓</div></div>
         ${(S.isAdmin||COMM_STAFF.includes(S.user))?`<div class="metric ${S.qv==='commission'?'active':''}" data-qv="commission"><div class="metric-label">${S.isAdmin?'Total commission':'Your commission'}</div><div class="metric-value blue">£${totalComm}</div><div class="metric-sub">from upsells</div><div class="metric-hint">tap to view ↓</div></div>`:''}
@@ -1077,7 +1078,7 @@ function alertsTab(alerts,ml){
 function leadsTab(vis){
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leads log</span><div style="display:flex;gap:8px">${S.isAdmin?`<button class="action-btn" id="exportcsv" style="background:rgba(59,191,173,0.1);border-color:rgba(59,191,173,0.3)">↓ Export CSV</button>`:''}<button class="action-btn" id="om">+ Add lead</button></div></div>
-    ${(S.isAdmin||S.user==='Zach')?`<div class="filter-pills">${['All',...STAFF].map(n=>`<button class="pill ${S.filter===n?'active':''}" data-f="${n}">${n}</button>`).join('')}</div>`:''}
+    ${(S.isAdmin||STAFF.includes(S.user))?`<div class="filter-pills">${['All',...STAFF].map(n=>`<button class="pill ${S.filter===n?'active':''}" data-f="${n}">${n}</button>`).join('')}</div>`:''}
     ${vis.length===0?`<div class="empty-state"><div class="icon">📋</div><p>No leads yet — add your first one above.</p></div>`:`
     <div class="table-wrap"><table>
       <thead><tr>
@@ -1088,6 +1089,8 @@ function leadsTab(vis){
       <tbody>
       ${vis.slice().reverse().map(l=>{
         const exp=S.expanded[l.id];
+        // Own the lead (or admin) → full contact + account + edit/delete. Other staff → company/name/email only.
+        const own=S.isAdmin||l.staff===S.user;
         const upD=(l.demos||[]).find(d=>d.status==='upcoming');
         const pR=(l.reminders||[]).filter(r=>!r.done).length;
         const ni=S.noteInputs[`n-${l.id}`]||'';
@@ -1097,10 +1100,10 @@ function leadsTab(vis){
             ${l.company?`<div style="font-size:13px;font-weight:500;color:var(--text-primary)">${l.company}</div>`:''}
             ${l.contactName?`<div style="font-size:12px;color:var(--text-secondary);margin-top:1px">${l.contactName}</div>`:''}
             ${l.contactEmail?`<div style="font-size:11px;color:var(--text-muted);margin-top:1px"><a href="mailto:${l.contactEmail}" style="color:var(--teal);text-decoration:none">${l.contactEmail}</a></div>`:''}
-            ${l.contactPhone?`<div style="font-size:11px;color:var(--text-muted)">${l.contactPhone}</div>`:''}
+            ${own&&l.contactPhone?`<div style="font-size:11px;color:var(--text-muted)">${l.contactPhone}</div>`:''}
             ${!l.company&&!l.contactName?`<span style="font-size:12px;color:var(--text-muted)">No contact info</span>`:''}
           </td>
-          <td><span class="badge b-${l.account.toLowerCase()}">${l.account}</span></td>
+          <td>${own?`<span class="badge b-${l.account.toLowerCase()}">${l.account}</span>`:`<span style="font-size:12px;color:var(--text-muted)">—</span>`}</td>
           <td><div style="display:flex;flex-wrap:wrap;gap:2px">${(l.products||[]).map(p=>ptag(p)).join('')}</div></td>
           <td style="min-width:170px">
             <div style="display:flex;flex-direction:column;gap:6px">
@@ -1195,8 +1198,8 @@ function leadsTab(vis){
           </td>
           <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${l.date}</td>
           <td style="white-space:nowrap">
-            <button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>
-            ${S.isAdmin||l.staff===S.user?`<button class="icon-btn danger" data-del="${l.id}" title="Delete">×</button>`:''}
+            ${own?`<button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>`:''}
+            ${own?`<button class="icon-btn danger" data-del="${l.id}" title="Delete">×</button>`:''}
           </td>
         </tr>`;
       }).join('')}
