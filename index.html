@@ -702,8 +702,10 @@ function buildAlerts(){
     });
   }
   myLeads().forEach(l=>{
+    // Follow-ups and reminders are private to the lead owner; demo alerts stay team-wide.
+    const own=S.isAdmin||l.staff===S.user;
     const k1=`fu-${l.id}`;
-    if(!S.dismissedAlerts[k1]&&l.status!=='Converted'&&l.status!=='Lost'&&daysSince(l.date)>=4)
+    if(own&&!S.dismissedAlerts[k1]&&l.status!=='Converted'&&l.status!=='Lost'&&daysSince(l.date)>=4)
       alerts.push({key:k1,type:'overdue',icon:'⏰',title:`Follow up needed`,sub:`${S.isAdmin?l.staff+' · ':''}${l.products.join(', ')} — no update for ${daysSince(l.date)} days`,leadId:l.id});
     (l.demos||[]).forEach(d=>{
       if(d.status==='upcoming'){
@@ -722,7 +724,7 @@ function buildAlerts(){
       }
     });
     (l.reminders||[]).forEach(r=>{
-      if(!r.done){const k=`rem-${r.id}`;if(!S.dismissedAlerts[k]&&new Date(r.dt)<=new Date(Date.now()+172800000))alerts.push({key:k,type:'reminder',icon:'🔔',title:'Manual reminder due',sub:`${S.isAdmin?l.staff+' · ':''}${r.txt} — ${fmtDt(r.dt)}`,leadId:l.id,remId:r.id});}
+      if(own&&!r.done){const k=`rem-${r.id}`;if(!S.dismissedAlerts[k]&&new Date(r.dt)<=new Date(Date.now()+172800000))alerts.push({key:k,type:'reminder',icon:'🔔',title:'Manual reminder due',sub:`${S.isAdmin?l.staff+' · ':''}${r.txt} — ${fmtDt(r.dt)}`,leadId:l.id,remId:r.id});}
     });
   });
   return alerts;
@@ -920,20 +922,23 @@ function alertsTab(alerts,ml){
   const now=new Date();
   const todayStr=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
 
-  // TODAY'S DEMOS
+  // Demos are shared across all staff; reminders and follow-ups are private to the lead owner.
+  const myOwn=ml.filter(l=>S.isAdmin||l.staff===S.user);
+
+  // TODAY'S DEMOS (all staff)
   const todayDemos=ml.flatMap(l=>(l.demos||[]).filter(d=>d.status==='upcoming'&&isToday(d.dt)).map(d=>({l,d}))).sort((a,b)=>new Date(a.d.dt)-new Date(b.d.dt));
 
-  // TODAY'S REMINDERS (due today)
-  const todayRems=ml.flatMap(l=>(l.reminders||[]).filter(r=>!r.done&&isToday(r.dt)).map(r=>({l,r}))).sort((a,b)=>new Date(a.r.dt)-new Date(b.r.dt));
+  // TODAY'S REMINDERS (due today, own only)
+  const todayRems=myOwn.flatMap(l=>(l.reminders||[]).filter(r=>!r.done&&isToday(r.dt)).map(r=>({l,r}))).sort((a,b)=>new Date(a.r.dt)-new Date(b.r.dt));
 
-  // FOLLOW-UPS DUE TODAY (leads with no contact for 4+ days, not converted/lost)
-  const followUps=ml.filter(l=>l.status!=='Converted'&&l.status!=='Lost'&&daysSince(l.date)>=4);
+  // FOLLOW-UPS DUE TODAY (own leads with no contact for 4+ days, not converted/lost)
+  const followUps=myOwn.filter(l=>l.status!=='Converted'&&l.status!=='Lost'&&daysSince(l.date)>=4);
 
-  // UPCOMING DEMOS (not today)
+  // UPCOMING DEMOS (not today, all staff)
   const upcomingDemos=ml.flatMap(l=>(l.demos||[]).filter(d=>d.status==='upcoming'&&!isToday(d.dt)).map(d=>({l,d}))).sort((a,b)=>new Date(a.d.dt)-new Date(b.d.dt));
 
-  // UPCOMING REMINDERS (not today, not done)
-  const upcomingRems=ml.flatMap(l=>(l.reminders||[]).filter(r=>!r.done&&!isToday(r.dt)).map(r=>({l,r}))).sort((a,b)=>new Date(a.r.dt)-new Date(b.r.dt));
+  // UPCOMING REMINDERS (not today, not done, own only)
+  const upcomingRems=myOwn.flatMap(l=>(l.reminders||[]).filter(r=>!r.done&&!isToday(r.dt)).map(r=>({l,r}))).sort((a,b)=>new Date(a.r.dt)-new Date(b.r.dt));
 
   // OTHER ALERTS (reschedule etc)
   const otherAlerts=alerts.filter(a=>a.type!=='overdue'&&a.type!=='demo-contact'&&a.type!=='demo-tomorrow');
@@ -942,7 +947,7 @@ function alertsTab(alerts,ml){
 
   // Build encoded payload for mark-all-done
   const allTodayIds=JSON.stringify({
-    demoIds:todayDemos.map(({l,d})=>({lid:l.id,did:d.id})),
+    demoIds:todayDemos.filter(({l})=>S.isAdmin||l.staff===S.user).map(({l,d})=>({lid:l.id,did:d.id})),
     remIds:todayRems.map(({l,r})=>({lid:l.id,rid:r.id})),
     followUpIds:followUps.map(l=>l.id)
   });
@@ -970,18 +975,20 @@ function alertsTab(alerts,ml){
         const h12=(t.getHours()%12)||12;
         const mm=t.getMinutes().toString().padStart(2,'0');
         const ampm=t.getHours()>=12?'pm':'am';
+        // Shared demo: everyone sees the details, but phone/Call stay owner-only. Show owner name so it's clear whose it is.
+        const own=S.isAdmin||l.staff===S.user;
         return`<div class="demo-day-card">
           <div class="demo-day-time">${h12}:${mm}<span class="ampm">${ampm}</span></div>
           <div class="demo-day-info">
             <div class="demo-day-client">${l.company||l.contactName||'Unknown client'}</div>
-            <div class="demo-day-contact">${l.contactName?l.contactName+' ':''} ${l.contactPhone?'· '+l.contactPhone:''}${S.isAdmin?' · '+l.staff:''}</div>
+            <div class="demo-day-contact">${l.contactName?l.contactName+' ':''} ${own&&l.contactPhone?'· '+l.contactPhone:''}${(S.isAdmin||!own)?' · '+l.staff:''}</div>
             ${d.note?`<div class="demo-day-agenda">${d.note}</div>`:''}
             ${(d.attendees||[]).length?`<div style="font-size:11px;color:var(--text-muted);margin-top:4px">👤 ${(d.attendees||[]).map(a=>a.name||a.email).filter(Boolean).join(', ')}</div>`:''}
             <div class="demo-day-products" style="margin-top:4px">${(d.demoProds||l.products||[]).map(p=>ptag(p)).join('')}</div>
           </div>
           <div class="demo-day-actions">
             <a class="call-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="background:rgba(46,204,113,0.18);border-color:rgba(46,204,113,0.6);color:#2ecc71;font-weight:600">🎥 Join Demo Room</a>
-            ${l.contactPhone?`<a class="call-btn" href="tel:${l.contactPhone}">📞 Call</a>`:''}
+            ${own&&l.contactPhone?`<a class="call-btn" href="tel:${l.contactPhone}">📞 Call</a>`:''}
             ${l.contactEmail?`<a class="email-btn" href="mailto:${l.contactEmail}">✉ Email</a>`:''}
           </div>
         </div>`;
@@ -1144,7 +1151,7 @@ function leadsTab(vis){
                   <div style="margin-top:6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
                     <span style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em">Demo products:</span>
                     ${(d.demoProds&&d.demoProds.length?d.demoProds:l.products).map(p=>ptag(p)).join('')}
-                    ${d.status==='upcoming'||d.status==='done'?`<button class="demo-action-btn" style="font-size:10px;padding:2px 8px;border-color:rgba(255,255,255,0.2);color:var(--text-secondary)" data-editdemoprods="${d.id}" data-lid="${l.id}">✎ change</button>`:''}
+                    ${own&&(d.status==='upcoming'||d.status==='done')?`<button class="demo-action-btn" style="font-size:10px;padding:2px 8px;border-color:rgba(255,255,255,0.2);color:var(--text-secondary)" data-editdemoprods="${d.id}" data-lid="${l.id}">✎ change</button>`:''}
                   </div>
                   ${S.editDemoProdsKey===d.id+'-'+l.id?`<div style="margin-top:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px">
                     <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">Which products did the demo cover?</div>
@@ -1170,7 +1177,7 @@ function leadsTab(vis){
                     <textarea placeholder="${d.status==='upcoming'?'Add a pre-demo note...':'Add a note from this demo...'}" data-dni="${d.id}-${l.id}">${S.demoNoteInputs[d.id+'-'+l.id]||''}</textarea>
                     <button data-dnadd="${d.id}" data-lid="${l.id}">+ Note</button>
                   </div>
-                  ${d.status==='upcoming'?(()=>{const hasInviteEmails=(d.attendees||[]).some(a=>a&&a.email&&String(a.email).trim());return`<div class="demo-actions">
+                  ${own&&d.status==='upcoming'?(()=>{const hasInviteEmails=(d.attendees||[]).some(a=>a&&a.email&&String(a.email).trim());return`<div class="demo-actions">
                     <button class="demo-action-btn done-btn" data-demodone="${d.id}" data-lid="${l.id}">✓ Mark done</button>
                     <button class="demo-action-btn reschedule-btn" data-resch="${d.id}" data-lid="${l.id}">↺ Reschedule</button>
                     ${hasInviteEmails?`<button class="demo-action-btn" style="border-color:rgba(116,185,255,0.4);color:#74b9ff;background:rgba(116,185,255,0.08)" data-sendinvite="${d.id}" data-lid="${l.id}">✉ Send invite</button>`:''}
