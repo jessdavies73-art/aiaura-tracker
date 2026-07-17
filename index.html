@@ -335,6 +335,11 @@ const UB=40;
 const STAFF=['Ricky','Katherine','Zach'];
 const COMM_STAFF=['Ricky','Katherine'];
 const PRODICTA_AIAURA_STAFF=['Ricky','Katherine'];
+// Who gets the twice-daily check-in prompt. Same membership as COMM_STAFF today, but kept
+// separate on purpose: commission eligibility and check-in nagging are unrelated concerns.
+const CHECKIN_STAFF=['Ricky','Katherine'];
+// [fromHour, toHour) in local time.
+const CHECKIN_SLOTS={morning:[9,10],afternoon:[14,15]};
 const PIN='8876';
 const STAFF_PINS={Ricky:'2675',Katherine:'9247',Zach:'2435'};
 const PRODUCTS=['Linka','AIAURA','PRODICTA','Firelynx'];
@@ -641,7 +646,9 @@ async function loadAll(){
       month:b.month||'',note:b.note||'',date:b.date||''
     }));
   }catch(e){console.error('Load error',e);}
-  S.loading=false;r();
+  S.loading=false;
+  maybeShowCheckin(); // covers logging in / opening the tracker inside a slot
+  r();
 }
 
 // ── STATE ───────────────────────────────────────────────────────────────────
@@ -652,6 +659,9 @@ let S={
   calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',editBusyId:null,busyTeamSel:[],
   // Unsaved modal input, held across the re-render that a team/attendee toggle triggers.
   busyFormSnap:null,demoFormSnap:null,
+  // Which check-in slot's modal is open ('morning'|'afternoon'|null), plus an in-memory
+  // record of dismissals so the prompt can't loop if localStorage is unavailable.
+  showCheckinModal:null,checkinSeen:{},
   showModal:false,showDemoModal:false,showReminderModal:false,showUpsellModal:false,showSignupModal:false,showAwardModal:false,showLossModal:false,
   editId:null,editUpsellId:null,demoLeadId:null,reminderLeadId:null,rescheduleId:null,editDemoId:null,editDemoLeadId:null,demoTeamSel:[],signupLeadId:null,awardStaff:'Ricky',lossLeadId:null,
   mProds:[],mErr:'',demoProdsSel:[],demoProdErr:'',upsellProds:[],upsellErr:'',
@@ -737,6 +747,54 @@ function buildAlerts(){
 
 function ptag(p){return`<span class="pt-${PK[p]}">${p}</span>`;}
 function sbadge(s){const m={'Contacted':'contacted','Demo booked':'demo','Converted':'converted','Lost':'lost'};return`<span class="badge s-${m[s]||'contacted'}">${s}</span>`;}
+
+// ── DAILY CHECK-IN ───────────────────────────────────────────────────────────
+// Twice-daily nudge for the staff in CHECKIN_STAFF, once per slot per day.
+function checkinSlotNow(){
+  const h=new Date().getHours();
+  const hit=Object.entries(CHECKIN_SLOTS).find(([,[from,to]])=>h>=from&&h<to);
+  return hit?hit[0]:null;
+}
+// Keyed per user as well as per day: on a shared machine one person dismissing
+// must not silence the other's prompt.
+function checkinKey(slot){
+  const d=new Date();
+  const p=n=>String(n).padStart(2,'0');
+  const day=`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; // local date, so it rolls over at local midnight
+  return`aiaura-checkin-${S.user}-${day}-${slot}`;
+}
+function checkinSeen(slot){
+  const k=checkinKey(slot);
+  if(S.checkinSeen[k])return true;
+  try{return localStorage.getItem(k)==='1';}catch(e){return false;} // storage blocked: fall back to the in-memory guard
+}
+function markCheckinSeen(slot){
+  const k=checkinKey(slot);
+  S.checkinSeen[k]=true; // set first, so a storage failure still stops it re-firing this session
+  try{localStorage.setItem(k,'1');}catch(e){/* private mode or file:// with storage off */}
+}
+function anyModalOpen(){
+  return!!(S.showModal||S.showDemoModal||S.showReminderModal||S.showUpsellModal||S.showBusyModal||S.showSignupModal||S.showLossModal||S.showAwardModal);
+}
+// Returns true if it opened the modal, leaving the re-render to the caller.
+function maybeShowCheckin(){
+  if(!S.loggedIn||S.loading)return false;
+  if(!CHECKIN_STAFF.includes(S.user))return false;
+  if(S.showCheckinModal||anyModalOpen())return false; // never stack over a form being filled in
+  const slot=checkinSlotNow();
+  if(!slot||checkinSeen(slot))return false;
+  S.showCheckinModal=slot;
+  return true;
+}
+function checkinModal(){
+  return`<div class="modal-overlay"><div class="modal">
+    <h3>Daily check-in</h3>
+    <div style="font-size:14px;color:var(--text-secondary)">Have you updated your calendar and leads today?</div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="ckno">Not yet</button>
+      <button class="btn-save" id="ckyes">Yes, all up to date</button>
+    </div>
+  </div></div>`;}
 
 function r(){
   const scrollY=window.scrollY;
@@ -921,6 +979,7 @@ function appHtml(){
   ${S.showBusyModal?busyModal():''}
   ${S.showSignupModal?signupModal():''}
   ${S.showLossModal?lossModal():''}
+  ${S.showCheckinModal?checkinModal():''}
   `;}
 
 function alertsTab(alerts,ml){
@@ -2187,7 +2246,14 @@ function bind(){
   // Allow Enter key on PIN input
   const pi=document.getElementById('pin');if(pi)pi.onkeydown=(e)=>{if(e.key==='Enter')pg?.click();};
   const bk=document.getElementById('bk');if(bk)bk.onclick=()=>{S.loginStep='choose';r();};
-  const lo=document.getElementById('lo');if(lo)lo.onclick=()=>{S.loggedIn=false;S.loginStep='choose';S.isAdmin=false;S.user=null;r();};
+  // Clear the check-in flag on logout, or it would render for whoever logs in next.
+  const lo=document.getElementById('lo');if(lo)lo.onclick=()=>{S.loggedIn=false;S.loginStep='choose';S.isAdmin=false;S.user=null;S.showCheckinModal=null;r();};
+  const ckyes=document.getElementById('ckyes');
+  if(ckyes)ckyes.onclick=()=>{markCheckinSeen(S.showCheckinModal);S.showCheckinModal=null;r();};
+  // "Not yet" also counts as dismissed for this slot: they're being sent to the leads tab to
+  // act on it, and re-prompting on the next tick would nag them while they do exactly that.
+  const ckno=document.getElementById('ckno');
+  if(ckno)ckno.onclick=()=>{markCheckinSeen(S.showCheckinModal);S.showCheckinModal=null;S.tab='leads';r();};
   const om=document.getElementById('om');if(om)om.onclick=()=>{S.showModal=true;S.editId=null;S.mProds=[];S.mErr='';S._mSnap={};r()};
   const cm=document.getElementById('cm');if(cm)cm.onclick=()=>{S.showModal=false;S._mSnap={};r();};
 
@@ -2613,6 +2679,9 @@ function bind(){
     else{await dbPost('tracker_upsells',payload);}
     S.showUpsellModal=false;await loadAll();};
 }
+// A slot can open while someone is already logged in (e.g. on since 9am when 2pm comes round),
+// so poll rather than only checking at login. Cheap, and the seen-guard keeps it to once per slot.
+setInterval(()=>{if(maybeShowCheckin())r();},60000);
 r();
 
 </script>
