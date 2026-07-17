@@ -309,8 +309,11 @@
   .cal-cell:last-child { border-right: none; }
   .cal-cell:hover { background: rgba(255,255,255,0.04); }
   .cal-cell.today-col { background: rgba(59,191,173,0.04); }
-  .cal-event { position: absolute; left: 2px; right: 2px; border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; z-index: 2; cursor: pointer; line-height: 1.4; transition: filter 0.12s, transform 0.12s, box-shadow 0.12s; }
-  .cal-event:hover { filter: brightness(1.2); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+  .cal-event { position: absolute; left: 2px; right: 2px; display: flex; align-items: flex-start; border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 500; overflow: hidden; white-space: nowrap; z-index: 2; cursor: pointer; line-height: 1.4; transition: filter 0.12s, transform 0.12s, box-shadow 0.12s; }
+  .cal-event:hover { filter: brightness(1.2); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.35); z-index: 3; }
+  /* Label truncates on its own so the dot and Join link survive at narrow widths. */
+  .cal-event-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-event-narrow { padding: 2px 3px; font-size: 9px; }
   .cal-event.demo { background: rgba(250,199,117,0.25); border-left: 3px solid #fac775; color: #fac775; }
   .cal-event.busy-meeting { background: rgba(116,185,255,0.18); border-left: 3px solid #74b9ff; color: #74b9ff; }
   .cal-event.busy-networking { background: rgba(162,155,254,0.18); border-left: 3px solid #a29bfe; color: #a29bfe; }
@@ -1338,11 +1341,37 @@ function calendarTab(){
     return evts;
   }
 
-  function eventStyle(evt){
+  // Split a cell's events into clusters that overlap in time. Each cluster gets
+  // an equal share of the cell width; events that clash with nothing stay full width.
+  function layoutCell(evts){
+    const items=evts.map(e=>{
+      const start=e.start.getTime();
+      // Guard zero/negative durations so same-instant events still count as overlapping.
+      return{evt:e,start,end:start+Math.max(e.durationMins,1)*60000};
+    }).sort((a,b)=>a.start-b.start||a.end-b.end);
+    const placed=[];
+    let cluster=[],clusterEnd=-Infinity;
+    const flush=()=>{
+      cluster.forEach((it,i)=>placed.push({evt:it.evt,col:i,cols:cluster.length}));
+      cluster=[];clusterEnd=-Infinity;
+    };
+    items.forEach(it=>{
+      if(cluster.length&&it.start>=clusterEnd)flush();
+      cluster.push(it);
+      clusterEnd=Math.max(clusterEnd,it.end);
+    });
+    flush();
+    return placed;
+  }
+
+  function eventStyle(evt,col=0,cols=1){
     const mins=evt.start.getMinutes();
     const top=Math.round((mins/60)*48);
     const height=Math.max(Math.round(evt.durationMins/60*48)-2,20);
-    return`top:${top}px;height:${height}px;`;
+    if(cols<2)return`top:${top}px;height:${height}px;`;
+    const GAP=2,INSET=4; // 2px gutter each side of the cell, 2px between columns
+    const track=`(100% - ${INSET+GAP*(cols-1)}px) / ${cols}`;
+    return`top:${top}px;height:${height}px;left:calc(2px + (${track}) * ${col} + ${GAP*col}px);width:calc(${track});right:auto;`;
   }
 
   const weekLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
@@ -1382,20 +1411,24 @@ function calendarTab(){
           const isT=d.toDateString()===today.toDateString();
           const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
           return`<div class="cal-cell ${isT?'today-col':''}">
-            ${evts.map(e=>{
+            ${layoutCell(evts).map(({evt:e,col,cols})=>{
+              // Side-by-side columns are tight, so decoration collapses into the tooltip.
+              // At 3+ columns even the Join chip is dropped so the label keeps the space —
+              // it stays reachable via the tooltip and the "Join Demo Room" button in the edit modal.
+              const narrow=cols>1,tight=cols>2;
               const attrs=e.type==='demo'
                 ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
                 :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
-              const teamSuffix=(Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
-              const meetIcon=e.type==='demo'&&e.meetLink?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join meeting — ${e.meetLink}" style="display:inline-block;margin-left:4px;padding:0 4px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥 Join</a>`:'';
+              const teamSuffix=(!narrow&&Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
+              const meetIcon=(e.type==='demo'&&e.meetLink&&!tight)?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join meeting — ${e.meetLink}" style="flex-shrink:0;margin-left:${narrow?2:4}px;padding:0 ${narrow?2:4}px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥${narrow?'':' Join'}</a>`:'';
               const attCount=Array.isArray(e.attendees)?e.attendees.length:0;
-              const attChip=attCount?` <span style="opacity:0.7;font-size:9px">· 👤${attCount}</span>`:'';
+              const attChip=(attCount&&!narrow)?` <span style="opacity:0.7;font-size:9px">· 👤${attCount}</span>`:'';
               const attTitle=attCount?`\nAttendees: ${e.attendees.map(a=>a.name||a.email).filter(Boolean).join(', ')}`:'';
               const titleParts=[e.label];
               if(Array.isArray(e.team)&&e.team.length)titleParts.push(`with ${e.team.join(', ')}`);
               const titleAttr=titleParts.join(' — ')+attTitle;
-              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype}" style="${eventStyle(e)}" title="${titleAttr}" ${attrs}>
-                <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${e.color};margin-right:3px;vertical-align:middle"></span>${e.label}${teamSuffix}${attChip}${meetIcon}
+              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype} ${narrow?'cal-event-narrow':''}" style="${eventStyle(e,col,cols)}" title="${titleAttr}" ${attrs}>
+                <span style="width:6px;height:6px;border-radius:50%;background:${e.color};margin:4px 3px 0 0;flex-shrink:0"></span><span class="cal-event-label">${e.label}${teamSuffix}${attChip}</span>${meetIcon}
               </div>`;
             }).join('')}
           </div>`;
