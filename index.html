@@ -369,6 +369,8 @@ function fmtInviteDate(dt){return new Date(dt).toLocaleDateString('en-GB',{weekd
 function fmtInviteTime(dt){return new Date(dt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 const SEND_INVITE_URL='https://aiaura-tracker-api.vercel.app/api/send-invite';
 const STATUSES=['Contacted','Demo booked','Converted','Partnership','Lost'];
+// Busy-block types where "More information" is optional; every other type requires it.
+const BUSY_MOREINFO_OPTIONAL=['networking','busy'];
 const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
 const LEAD_SOURCES=['LinkedIn','Referral','Networking event','Cold outreach','Website','Email campaign','Phone call','Other'];
 const LOSS_REASONS=['Price too high','Wrong timing','Went with competitor','No response','Not interested','Budget cut','Other'];
@@ -1552,13 +1554,13 @@ function busyModal(){
       <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="bstart" value="${esc(startVal)}"/></div>
       <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="bend" value="${esc(endVal)}"/></div>
     </div>
-    <div class="form-field"><label class="form-label">What is it?</label><select id="btype">${TYPES.map(([v,lbl])=>`<option value="${v}"${v===typeVal?' selected':''}>${lbl}</option>`).join('')}</select></div>
+    <div class="form-field"><label class="form-label">What is it?</label><select id="btype" onchange="window.__busyTypeChange()">${TYPES.map(([v,lbl])=>`<option value="${v}"${v===typeVal?' selected':''}>${lbl}</option>`).join('')}</select></div>
     <div class="form-field">
       <label class="form-label">Who else is joining? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
     </div>
     <div class="form-field"><label class="form-label">Company / Name</label><input type="text" id="bcompany" value="${esc(companyVal)}" placeholder="e.g. Acme Ltd, Jane Smith…"/></div>
-    <div class="form-field"><label class="form-label">More information</label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
+    <div class="form-field"><label class="form-label">More information${BUSY_MOREINFO_OPTIONAL.includes(typeVal)?` <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span>`:''}</label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
@@ -2229,6 +2231,11 @@ window.__toggleBusyTeam=function(n){
   S.busyTeamSel=S.busyTeamSel.includes(n)?S.busyTeamSel.filter(x=>x!==n):[...S.busyTeamSel,n];
   r();
 };
+window.__busyTypeChange=function(){
+  // Re-render so the "(optional)" hint tracks the selected type. Snapshot first so typed input survives.
+  snapshotBusyForm();
+  r();
+};
 function readAttendeesFromDom(){
   const rows=Array.from(document.querySelectorAll('[data-attrow]'));
   return rows.map(row=>({
@@ -2689,7 +2696,7 @@ function bind(){
     snapshotBusyForm();
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
-    if(!label){S.busyErr='Please add some more information.';r();return;}
+    if(!label&&!BUSY_MOREINFO_OPTIONAL.includes(type)){S.busyErr='Please add some more information.';r();return;}
     const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type,busy_company:company,busy_team:S.busyTeamSel};
     try{
       if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
