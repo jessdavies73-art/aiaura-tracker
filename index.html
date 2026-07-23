@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>AIAURA Sales Tracker</title>
+<title>PRODICTA Sales Tracker</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
@@ -814,14 +814,14 @@ function r(){
 function loginHtml(){
   if(S.loginStep==='choose') return`
     <div class="login-page"><div class="login-card">
-      <div class="login-logo"><div class="brand">AIAURA</div><div class="tagline">Unlocking Human Talent</div></div>
+      <div class="login-logo"><div class="brand">PRODICTA</div><div class="tagline">Unlocking Human Talent</div></div>
       <p class="login-prompt">Sales Tracker — select your name</p>
       ${STAFF.map(n=>`<button class="staff-btn" data-n="${n}"><div class="avatar">${n[0]}</div>${n}</button>`).join('')}
       <button class="staff-btn dir" data-n="__admin__"><div class="avatar">J</div>Jessie &nbsp;·&nbsp; Director</button>
     </div></div>`;
   if(S.loginStep==='staffpin') return`
     <div class="login-page"><div class="login-card">
-      <div class="login-logo"><div class="brand">AIAURA</div><div class="tagline">${S._pendingUser}</div></div>
+      <div class="login-logo"><div class="brand">PRODICTA</div><div class="tagline">${S._pendingUser}</div></div>
       <p class="login-prompt">Enter your PIN to continue</p>
       <input class="pin-input" type="password" id="pin" placeholder="····" maxlength="4" autofocus/>
       ${S.loginErr?`<p class="err-msg">${S.loginErr}</p>`:''}
@@ -830,7 +830,7 @@ function loginHtml(){
     </div></div>`;
   return`
     <div class="login-page"><div class="login-card">
-      <div class="login-logo"><div class="brand">AIAURA</div><div class="tagline">Director access</div></div>
+      <div class="login-logo"><div class="brand">PRODICTA</div><div class="tagline">Director access</div></div>
       <p class="login-prompt">Enter your PIN to continue</p>
       <input class="pin-input" type="password" id="pin" placeholder="····" maxlength="4" autofocus/>
       ${S.loginErr?`<p class="err-msg">${S.loginErr}</p>`:''}
@@ -944,7 +944,7 @@ function appHtml(){
   <div class="app">
     <div class="topbar">
       <div class="topbar-left">
-        <div><div class="topbar-brand">AIAURA</div><div class="topbar-sub">Sales Tracker</div></div>
+        <div><div class="topbar-brand">PRODICTA</div><div class="topbar-sub">Sales Tracker</div></div>
       </div>
       <div class="topbar-right">
         ${S.isAdmin?'<span class="badge-admin">Director</span>':`<span class="badge-user">${S.user}</span>`}
