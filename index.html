@@ -501,6 +501,13 @@ async function dbGet(table,params=''){
 }
 async function dbPost(table,body){
   const res=await fetch(`${SB_URL}/rest/v1/${table}`,{method:'POST',headers:H,body:JSON.stringify(body)});
+  if(!res.ok){
+    // Surface the real reason instead of returning an error object that callers mistake for success.
+    let detail='';
+    try{const e=await res.json();detail=e.message||e.hint||e.details||JSON.stringify(e);}
+    catch(_){try{detail=await res.text();}catch(__){detail='';}}
+    throw new Error(`HTTP ${res.status}${detail?': '+detail:''}`);
+  }
   return res.json();
 }
 async function dbPatch(table,id,body){
@@ -2287,12 +2294,32 @@ function bind(){
     const payload={staff:st,company:document.getElementById('mco').value.trim(),contact_name:document.getElementById('mcn').value.trim(),contact_email:document.getElementById('mem').value.trim(),contact_phone:document.getElementById('mph').value.trim(),account:document.getElementById('mac').value,products:S.mProds,status:document.getElementById('mst').value,date:document.getElementById('mdt').value,lead_source:document.getElementById('msrc')?.value||''};
     const savedStatus=payload.status;
     const noteTxt=(document.getElementById('mnote')?.value||'').trim();
+    // If the save fails we re-render to show the error, so snapshot the typed input first,
+    // otherwise the modal blanks out and the user loses everything they just entered.
+    const snap=(id)=>{const el=document.getElementById(id);return el?el.value:'';};
+    const keepForm=()=>{S._mSnap={ms:snap('ms'),mco:snap('mco'),mcn:snap('mcn'),mem:snap('mem'),mph:snap('mph'),mac:snap('mac'),mst:snap('mst'),mdt:snap('mdt'),msrc:snap('msrc'),mnote:snap('mnote')};};
     let newLeadId=null;
-    if(S.editId!==null){await dbPatch('tracker_leads',S.editId,payload);}
-    else{const res=await dbPost('tracker_leads',payload);if(res&&res[0])newLeadId=res[0].id;}
+    try{
+      if(S.editId!==null){
+        const ok=await dbPatch('tracker_leads',S.editId,payload);
+        if(!ok)throw new Error('The server rejected the update (check your connection).');
+      }else{
+        const res=await dbPost('tracker_leads',payload);
+        if(!res||!res[0]||!res[0].id)throw new Error('The server did not confirm the new lead.');
+        newLeadId=res[0].id;
+      }
+    }catch(err){
+      keepForm();
+      const msg=err&&err.message?err.message:'unknown error';
+      S.mErr='Could not save lead: '+msg+'. Nothing was saved, please try again.';
+      alert('Could not save lead.\n\n'+msg+'\n\nYour details are still here. Please try again.');
+      r();return;
+    }
+    // Lead saved. The note is best-effort: don't block or re-open the modal if only the note fails,
+    // or a retry would create a duplicate lead.
     const noteLeadId=newLeadId||S.editId;
-    if(noteTxt&&noteLeadId!=null){await dbPost('tracker_notes',{lead_id:noteLeadId,ts:nowTs(),txt:noteTxt});}
-    S.showModal=false;S._mSnap={};
+    if(noteTxt&&noteLeadId!=null){try{await dbPost('tracker_notes',{lead_id:noteLeadId,ts:nowTs(),txt:noteTxt});}catch(e){console.error('Note save failed',e);}}
+    S.showModal=false;S._mSnap={};S.mErr='';
     await loadAll();
     if(savedStatus==='Demo booked'&&(newLeadId||S.editId)){
       S.showDemoModal=true;S.demoLeadId=newLeadId||S.editId;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoFormSnap=null;S.demoMeetLink=undefined;S.demoAttendees=[];r();
