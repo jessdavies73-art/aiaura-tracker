@@ -142,6 +142,7 @@
   .s-contacted { background: rgba(116,185,255,0.14); color: #74b9ff; }
   .s-demo { background: rgba(250,199,117,0.14); color: #fac775; }
   .s-converted { background: rgba(59,191,173,0.16); color: #3bbfad; }
+  .s-partnership { background: rgba(162,155,254,0.16); color: #a29bfe; }
   .s-lost { background: rgba(255,118,117,0.14); color: #ff7675; }
   .pt-linka { background: rgba(116,185,255,0.15); color: #74b9ff; font-size: 10px; padding: 2px 7px; border-radius: 12px; font-weight: 600; display: inline-block; margin: 1px; }
   .pt-aiaura { background: rgba(59,191,173,0.15); color: #3bbfad; font-size: 10px; padding: 2px 7px; border-radius: 12px; font-weight: 600; display: inline-block; margin: 1px; }
@@ -317,6 +318,10 @@
   .cal-event.demo { background: rgba(250,199,117,0.25); border-left: 3px solid #fac775; color: #fac775; }
   .cal-event.busy-meeting { background: rgba(116,185,255,0.18); border-left: 3px solid #74b9ff; color: #74b9ff; }
   .cal-event.busy-networking { background: rgba(162,155,254,0.18); border-left: 3px solid #a29bfe; color: #a29bfe; }
+  .cal-event.busy-demo { background: rgba(250,199,117,0.25); border-left: 3px solid #fac775; color: #fac775; }
+  .cal-event.busy-partnership { background: rgba(59,191,173,0.18); border-left: 3px solid #3bbfad; color: #3bbfad; }
+  .cal-event.busy-followup { background: rgba(116,185,255,0.18); border-left: 3px solid #74b9ff; color: #74b9ff; }
+  .cal-event.busy-discovery { background: rgba(225,123,214,0.18); border-left: 3px solid #e17bd6; color: #e17bd6; }
   .cal-event.busy-busy { background: rgba(255,118,117,0.15); border-left: 3px solid #ff7675; color: #ff7675; }
   .cal-event.busy-other { background: rgba(255,255,255,0.08); border-left: 3px solid rgba(255,255,255,0.3); color: var(--text-secondary); }
   .cal-staff-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-secondary); }
@@ -362,7 +367,7 @@ function roomForDemo(lead,demo){
 function fmtInviteDate(dt){return new Date(dt).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
 function fmtInviteTime(dt){return new Date(dt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
 const SEND_INVITE_URL='https://aiaura-tracker-api.vercel.app/api/send-invite';
-const STATUSES=['Contacted','Demo booked','Converted','Lost'];
+const STATUSES=['Contacted','Demo booked','Converted','Partnership','Lost'];
 const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
 const LEAD_SOURCES=['LinkedIn','Referral','Networking event','Cold outreach','Website','Email campaign','Phone call','Other'];
 const LOSS_REASONS=['Price too high','Wrong timing','Went with competitor','No response','Not interested','Budget cut','Other'];
@@ -630,7 +635,7 @@ async function loadAll(){
       id:b.id,staff:b.staff,
       start:utcToLocal(b.start_dt),
       end:utcToLocal(b.end_dt),
-      label:b.label||'',type:b.type||'busy',
+      label:b.label||'',type:b.type||'busy',company:b.busy_company||'',
       busyTeam:b.busy_team||[]
     }));
     S.signups=(signups||[]).map(sg=>({
@@ -746,7 +751,7 @@ function buildAlerts(){
 }
 
 function ptag(p){return`<span class="pt-${PK[p]}">${p}</span>`;}
-function sbadge(s){const m={'Contacted':'contacted','Demo booked':'demo','Converted':'converted','Lost':'lost'};return`<span class="badge s-${m[s]||'contacted'}">${s}</span>`;}
+function sbadge(s){const m={'Contacted':'contacted','Demo booked':'demo','Converted':'converted','Partnership':'partnership','Lost':'lost'};return`<span class="badge s-${m[s]||'contacted'}">${s}</span>`;}
 
 // ── DAILY CHECK-IN ───────────────────────────────────────────────────────────
 // Twice-daily nudge for the staff in CHECKIN_STAFF, once per slot per day.
@@ -1180,8 +1185,8 @@ function leadsTab(vis){
             <div style="display:flex;flex-direction:column;gap:6px">
               ${STATUSES.map(s=>{
                 const isCurr=l.status===s;
-                const smap={'Contacted':'contacted','Demo booked':'demo','Converted':'converted','Lost':'lost'};
-                const col={Contacted:'#74b9ff','Demo booked':'#fac775',Converted:'#3bbfad',Lost:'#ff7675'}[s];
+                const smap={'Contacted':'contacted','Demo booked':'demo','Converted':'converted','Partnership':'partnership','Lost':'lost'};
+                const col={Contacted:'#74b9ff','Demo booked':'#fac775',Converted:'#3bbfad',Partnership:'#a29bfe',Lost:'#ff7675'}[s];
                 return`<button
                   class="pipeline-step ${isCurr?'pipeline-active':''}"
                   data-setstatus="${s}" data-lid="${l.id}"
@@ -1392,12 +1397,15 @@ function calendarTab(){
         evts.push({type:'demo',start:new Date(d.dt),durationMins:60,label:`${l.company||l.contactName||'Demo'} — ${l.staff}`,staff:l.staff,team,demoId:d.id,leadId:l.id,meetLink:roomForDemo(l,d),attendees:Array.isArray(d.attendees)?d.attendees:[],color:STAFF_COLORS[l.staff]||'#fac775'});
       });
     });
+    const TYPE_LABELS={demo:'Demo',partnership:'Partnership',networking:'Networking',followup:'Follow up',discovery:'Discovery call',busy:'Busy/Unavailable',meeting:'Meeting',other:'Other'};
     S.busyBlocks.forEach(b=>{
       const bs=new Date(b.start);
       if(!sameLocalDay(bs,day))return;
       const team=Array.isArray(b.busyTeam)?b.busyTeam:[];
       const be=new Date(b.end);
-      evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:`${b.staff}: ${b.label}`,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
+      const tlbl=TYPE_LABELS[b.type]||b.type||'Busy';
+      const chip=`${b.staff}: ${tlbl}${b.company?' · '+b.company:''}`;
+      evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:chip,moreInfo:b.label,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
     });
     return evts;
   }
@@ -1486,6 +1494,7 @@ function calendarTab(){
               const attChip=(attCount&&!narrow)?` <span style="opacity:0.7;font-size:9px">· 👤${attCount}</span>`:'';
               const attTitle=attCount?`\nAttendees: ${e.attendees.map(a=>a.name||a.email).filter(Boolean).join(', ')}`:'';
               const titleParts=[e.label];
+              if(e.moreInfo&&e.moreInfo!==e.subtype)titleParts.push(e.moreInfo);
               if(Array.isArray(e.team)&&e.team.length)titleParts.push(`with ${e.team.join(', ')}`);
               const titleAttr=titleParts.join(' — ')+attTitle;
               return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype} ${narrow?'cal-event-narrow':''}" style="${eventStyle(e,col,cols)}" title="${titleAttr}" ${attrs}>
@@ -1509,11 +1518,12 @@ function busyModal(){
   const keep=(k,dflt)=>snap[k]===undefined?dflt:snap[k];
   const startVal=keep('start',editing?existing.start:localDt());
   const endVal=keep('end',editing?existing.end:localDt(3600000));
-  const typeVal=keep('type',editing?existing.type:'meeting');
+  const typeVal=keep('type',editing?existing.type:'demo');
   const labelVal=keep('label',editing?(existing.label||''):'');
+  const companyVal=keep('company',editing?(existing.company||''):'');
   const staffVal=keep('staff',editing?existing.staff:S.user);
   const STAFF_OPTS=[...STAFF,'Jessie'];
-  const TYPES=[['meeting','Meeting'],['networking','Networking'],['busy','Busy — unavailable'],['other','Other']];
+  const TYPES=[['demo','Demo'],['partnership','Partnership'],['networking','Networking'],['followup','Follow up'],['discovery','Discovery call'],['busy','Busy/Unavailable']];
   const TEAM=['Ricky','Katherine','Zach','Jessie'];
   const selectedTeam=Array.isArray(S.busyTeamSel)?S.busyTeamSel:[];
   const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
@@ -1539,7 +1549,8 @@ function busyModal(){
       <label class="form-label">Who else is joining? <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label>
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
     </div>
-    <div class="form-field"><label class="form-label">Label <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
+    <div class="form-field"><label class="form-label">Company / Name</label><input type="text" id="bcompany" value="${esc(companyVal)}" placeholder="e.g. Acme Ltd, Jane Smith…"/></div>
+    <div class="form-field"><label class="form-label">More information <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
@@ -2189,7 +2200,7 @@ window.__editBusy=function(id){
 function snapField(id){const el=document.getElementById(id);return el?el.value:undefined;}
 function snapshotBusyForm(){
   if(!document.getElementById('bstart'))return; // modal not open
-  S.busyFormSnap={start:snapField('bstart'),end:snapField('bend'),type:snapField('btype'),label:snapField('blabel'),staff:snapField('bstaff')};
+  S.busyFormSnap={start:snapField('bstart'),end:snapField('bend'),type:snapField('btype'),label:snapField('blabel'),company:snapField('bcompany'),staff:snapField('bstaff')};
 }
 function snapshotDemoForm(){
   if(!document.getElementById('ddt'))return; // modal not open
@@ -2635,13 +2646,14 @@ function bind(){
     const start=document.getElementById('bstart').value;
     const end=document.getElementById('bend').value;
     const type=document.getElementById('btype').value;
+    const company=document.getElementById('bcompany').value.trim();
     const label=document.getElementById('blabel').value.trim()||type;
     // Every failure below re-renders to show the error and leaves the modal open, so the
     // entered values have to survive it — otherwise the user is told to retype what they just lost.
     snapshotBusyForm();
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
-    const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type,busy_team:S.busyTeamSel};
+    const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type,busy_company:company,busy_team:S.busyTeamSel};
     try{
       if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
       else{await dbPost('tracker_busy_blocks',payload);}
