@@ -1550,7 +1550,7 @@ function busyModal(){
       <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${teamButtons}</div>
     </div>
     <div class="form-field"><label class="form-label">Company / Name</label><input type="text" id="bcompany" value="${esc(companyVal)}" placeholder="e.g. Acme Ltd, Jane Smith…"/></div>
-    <div class="form-field"><label class="form-label">More information <span style="color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:10px">(optional)</span></label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
+    <div class="form-field"><label class="form-label">More information</label><input type="text" id="blabel" value="${esc(labelVal)}" placeholder="e.g. Team meeting, Networking event Manchester…"/></div>
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
@@ -2090,14 +2090,19 @@ function leadModal(){
       <option ${(v('mac',l&&l.account))==='Employer'?'selected':''}>Employer</option>
     </select></div>
     <div class="form-field">
-      <label class="form-label">Products <span class="form-hint" style="display:inline;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
+      <label class="form-label">Products</label>
       <div class="pchk-grid">
-        ${PRODUCTS.map(p=>{const k=PK[p];const sel=S.mProds.includes(p);return`<div class="pchk ${sel?'sel-'+k:''} mpt" data-p="${p}"><input type="checkbox" ${sel?'checked':''}/><span class="pchk-label"><span class="dot" style="background:${k==='linka'?'#74b9ff':k==='aiaura'?'#3bbfad':k==='prodicta'?'#a29bfe':'#ff7675'}"></span>${p}</span></div>`;}).join('')}
+        ${PRODUCTS.filter(p=>p==='PRODICTA').map(p=>{const k=PK[p];const sel=S.mProds.includes(p);return`<div class="pchk ${sel?'sel-'+k:''} mpt" data-p="${p}"><input type="checkbox" ${sel?'checked':''}/><span class="pchk-label"><span class="dot" style="background:${k==='linka'?'#74b9ff':k==='aiaura'?'#3bbfad':k==='prodicta'?'#a29bfe':'#ff7675'}"></span>${p}</span></div>`;}).join('')}
       </div>
       ${S.mErr?`<p class="form-err">${S.mErr}</p>`:''}
     </div>
     <div class="form-field"><label class="form-label">Status</label><select id="mst">${STATUSES.map(s=>`<option ${(v('mst',l&&l.status)||'Contacted')===s?'selected':''}>${s}</option>`).join('')}</select></div>
     <div class="form-field"><label class="form-label">Date</label><input type="date" id="mdt" value="${v('mdt',l?l.date:new Date().toISOString().slice(0,10))}"/></div>
+    <div class="form-field" style="margin-top:4px">
+      <label class="form-label">Notes</label>
+      ${ed&&l&&l.notes&&l.notes.length?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;max-height:180px;overflow-y:auto">${[...l.notes].reverse().map(n=>`<div class="note-card"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}</div>`:''}
+      <textarea id="mnote" rows="3" placeholder="${ed?'Add a note…':'Add a note (optional)'}" style="width:100%;box-sizing:border-box;resize:vertical;font-family:var(--font)">${v('mnote','')}</textarea>
+    </div>
     <div class="modal-actions"><button class="btn-cancel" id="cm">Cancel</button><button class="btn-save" id="sv">${ed?'Save changes':'Save lead'}</button></div>
   </div></div>`;}
 
@@ -2265,13 +2270,13 @@ function bind(){
   // act on it, and re-prompting on the next tick would nag them while they do exactly that.
   const ckno=document.getElementById('ckno');
   if(ckno)ckno.onclick=()=>{markCheckinSeen(S.showCheckinModal);S.showCheckinModal=null;S.tab='leads';r();};
-  const om=document.getElementById('om');if(om)om.onclick=()=>{S.showModal=true;S.editId=null;S.mProds=[];S.mErr='';S._mSnap={};r()};
+  const om=document.getElementById('om');if(om)om.onclick=()=>{S.showModal=true;S.editId=null;S.mProds=['PRODICTA'];S.mErr='';S._mSnap={};r()};
   const cm=document.getElementById('cm');if(cm)cm.onclick=()=>{S.showModal=false;S._mSnap={};r();};
 
   document.querySelectorAll('.mpt').forEach(el=>el.onclick=()=>{
     // Snapshot all text fields before re-render so they survive
     const snap=(id)=>{const el=document.getElementById(id);return el?el.value:'';};
-    S._mSnap={ms:snap('ms'),mco:snap('mco'),mcn:snap('mcn'),mem:snap('mem'),mph:snap('mph'),mac:snap('mac'),mst:snap('mst'),mdt:snap('mdt'),msrc:snap('msrc')};
+    S._mSnap={ms:snap('ms'),mco:snap('mco'),mcn:snap('mcn'),mem:snap('mem'),mph:snap('mph'),mac:snap('mac'),mst:snap('mst'),mdt:snap('mdt'),msrc:snap('msrc'),mnote:snap('mnote')};
     const p=el.dataset.p;S.mProds=S.mProds.includes(p)?S.mProds.filter(x=>x!==p):[...S.mProds,p];S.mErr='';r();
   });
   const sv=document.getElementById('sv');
@@ -2280,9 +2285,12 @@ function bind(){
     const st=S.isAdmin?document.getElementById('ms').value:S.user;
     const payload={staff:st,company:document.getElementById('mco').value.trim(),contact_name:document.getElementById('mcn').value.trim(),contact_email:document.getElementById('mem').value.trim(),contact_phone:document.getElementById('mph').value.trim(),account:document.getElementById('mac').value,products:S.mProds,status:document.getElementById('mst').value,date:document.getElementById('mdt').value,lead_source:document.getElementById('msrc')?.value||''};
     const savedStatus=payload.status;
+    const noteTxt=(document.getElementById('mnote')?.value||'').trim();
     let newLeadId=null;
     if(S.editId!==null){await dbPatch('tracker_leads',S.editId,payload);}
     else{const res=await dbPost('tracker_leads',payload);if(res&&res[0])newLeadId=res[0].id;}
+    const noteLeadId=newLeadId||S.editId;
+    if(noteTxt&&noteLeadId!=null){await dbPost('tracker_notes',{lead_id:noteLeadId,ts:nowTs(),txt:noteTxt});}
     S.showModal=false;S._mSnap={};
     await loadAll();
     if(savedStatus==='Demo booked'&&(newLeadId||S.editId)){
@@ -2647,12 +2655,13 @@ function bind(){
     const end=document.getElementById('bend').value;
     const type=document.getElementById('btype').value;
     const company=document.getElementById('bcompany').value.trim();
-    const label=document.getElementById('blabel').value.trim()||type;
+    const label=document.getElementById('blabel').value.trim();
     // Every failure below re-renders to show the error and leaves the modal open, so the
     // entered values have to survive it — otherwise the user is told to retype what they just lost.
     snapshotBusyForm();
     if(!start||!end){S.busyErr='Please set a start and end time.';r();return;}
     if(new Date(end)<=new Date(start)){S.busyErr='End time must be after start time.';r();return;}
+    if(!label){S.busyErr='Please add some more information.';r();return;}
     const payload={staff,start_dt:saveLocalDt(start),end_dt:saveLocalDt(end),label,type,busy_company:company,busy_team:S.busyTeamSel};
     try{
       if(S.editBusyId){await dbPatch('tracker_busy_blocks',S.editBusyId,payload);}
