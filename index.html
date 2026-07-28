@@ -730,8 +730,21 @@ function canSeeStaff(name,user=S.user,isAdmin=S.isAdmin){
 function calendarOwners(user){return HIDDEN_STAFF[user]?HIDDEN_STAFF[user].calendar.slice():null;}
 // Every staff name a viewer may see attributed anywhere in the UI.
 function staffVisibleTo(user=S.user,isAdmin=S.isAdmin){return ALL_STAFF.filter(n=>canSeeStaff(n,user,isAdmin));}
-// Hidden staff show up in the demo/busy team pickers only for the people cleared for them.
-function teamPickerNames(){return['Ricky','Katherine','Zach','Jessie'].concat(HIDDEN_NAMES.filter(n=>S.isAdmin||HIDDEN_STAFF[n].seenBy.includes(S.user)));}
+// Owners a viewer may be offered when creating or editing a calendar entry. Jessie is always a
+// candidate because her diary is shared, but she is not on STAFF, hence the explicit entry.
+// Unlisted staff are held to their calendar allowlist: you are not offered a diary you cannot see.
+function calendarPickerNames(){
+  const all=[...staffVisibleTo(),'Jessie'];
+  const allow=calendarOwners(S.user);
+  return allow?all.filter(n=>allow.includes(n)):all;
+}
+// Hidden staff show up in the demo/busy team pickers only for the people cleared for them, and
+// the picker itself is narrowed to the diaries the viewer can see.
+function teamPickerNames(){
+  const names=['Ricky','Katherine','Zach','Jessie'].concat(HIDDEN_NAMES.filter(n=>S.isAdmin||HIDDEN_STAFF[n].seenBy.includes(S.user)));
+  const allow=calendarOwners(S.user);
+  return allow?names.filter(n=>allow.includes(n)):names;
+}
 // Owners whose names are offered as leaderboard rows / filter pills for the current viewer.
 function rosterForView(){return S.isAdmin?staffVisibleTo():visibleOwners(S.user);}
 function myLeads(){return S.isAdmin?S.leads:S.leads.filter(l=>visibleOwners(S.user).includes(l.staff));}
@@ -1582,9 +1595,9 @@ function busyModal(){
   const labelVal=keep('label',editing?(existing.label||''):'');
   const companyVal=keep('company',editing?(existing.company||''):'');
   const staffVal=keep('staff',editing?existing.staff:S.user);
-  // Owner select: a hidden staff member still needs to pick themselves, so this uses the
-  // "names you may see" list rather than the team-picker list.
-  const STAFF_OPTS=[...staffVisibleTo(),'Jessie'];
+  // Owner select (admin only today). A hidden staff member still needs to be able to pick
+  // themselves, so this is the calendar list rather than the "who else is joining" list.
+  const STAFF_OPTS=calendarPickerNames();
   const TYPES=[['demo','Demo'],['partnership','Partnership'],['networking','Networking'],['followup','Follow up'],['discovery','Discovery call'],['busy','Busy/Unavailable']];
   const TEAM=teamPickerNames();
   const selectedTeam=Array.isArray(S.busyTeamSel)?S.busyTeamSel:[];
