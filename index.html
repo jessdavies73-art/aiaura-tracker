@@ -350,7 +350,10 @@ const STAFF=['Ricky','Katherine','Zach'];
 // Staff kept off the public roster. They log in normally, but their name and their leads are
 // only surfaced to the people in `seenBy` (Jessie is never listed — she sees everything via
 // S.isAdmin). `sees` is the full set of lead owners that person is allowed to view.
-const HIDDEN_STAFF={Kenny:{sees:['Kenny','Zach'],seenBy:['Zach']}};
+// `sees` = lead owners they may view. `calendar` = booking owners they may view, which is a
+// separate list because Jessie's diary is shared with the team while her leads never are.
+// `seenBy` = roster members cleared to see them.
+const HIDDEN_STAFF={Kenny:{sees:['Kenny','Zach'],calendar:['Kenny','Zach','Jessie'],seenBy:['Zach']}};
 const HIDDEN_NAMES=Object.keys(HIDDEN_STAFF);
 // Everyone with a login, hidden or not. Used to recognise a logged-in user; NOT used to build
 // the login screen, which lists STAFF only — unlisted staff sign in via the transparent strip.
@@ -721,6 +724,10 @@ function canSeeStaff(name,user=S.user,isAdmin=S.isAdmin){
   if(!HIDDEN_STAFF[name])return true;
   return isAdmin||name===user||HIDDEN_STAFF[name].seenBy.includes(user);
 }
+// Whose bookings a user may see on the calendar. Roster staff see everyone's — names are baked
+// into every label, so ownership is always clear. Unlisted staff are held to their own list.
+// null means "no restriction".
+function calendarOwners(user){return HIDDEN_STAFF[user]?HIDDEN_STAFF[user].calendar.slice():null;}
 // Every staff name a viewer may see attributed anywhere in the UI.
 function staffVisibleTo(user=S.user,isAdmin=S.isAdmin){return ALL_STAFF.filter(n=>canSeeStaff(n,user,isAdmin));}
 // Hidden staff show up in the demo/busy team pickers only for the people cleared for them.
@@ -1431,16 +1438,18 @@ function calendarTab(){
   }
 
   const me=S.user;
-  // All staff can see every booking — names are baked into each event label so the owner is always clear.
-  // The one exception is hidden staff: a viewer who is not cleared for them must not see their
-  // blocks, nor their name in someone else's team list.
-  const visibleToMe=()=>true;
+  // Roster staff see every booking — names are baked into each event label so the owner is
+  // always clear. Two exceptions: a viewer who is not cleared for an unlisted staff member must
+  // not see their blocks (nor their name in someone else's team list), and an unlisted staff
+  // member only sees the diaries on their own calendarOwners list.
+  const calAllow=calendarOwners(S.user);
+  const visibleToMe=n=>canSeeStaff(n)&&(!calAllow||calAllow.includes(n));
   const visibleTeam=t=>(Array.isArray(t)?t:[]).filter(n=>canSeeStaff(n));
 
   function eventsForDay(day){
     const evts=[];
     S.leads.forEach(l=>{
-      if(!canSeeStaff(l.staff))return;
+      if(!visibleToMe(l.staff))return;
       (l.demos||[]).filter(d=>d.status==='upcoming').forEach(d=>{
         if(!sameLocalDay(new Date(d.dt),day))return;
         const team=visibleTeam(d.demoTeam);
@@ -1449,7 +1458,7 @@ function calendarTab(){
     });
     const TYPE_LABELS={demo:'Demo',partnership:'Partnership',networking:'Networking',followup:'Follow up',discovery:'Discovery call',busy:'Busy/Unavailable',meeting:'Meeting',other:'Other'};
     S.busyBlocks.forEach(b=>{
-      if(!canSeeStaff(b.staff))return;
+      if(!visibleToMe(b.staff))return;
       const bs=new Date(b.start);
       if(!sameLocalDay(bs,day))return;
       const team=visibleTeam(b.busyTeam);
@@ -1507,7 +1516,7 @@ function calendarTab(){
       <button class="action-btn" id="obusy">+ Block time</button>
     </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:1rem">
-      ${Object.entries(STAFF_COLORS).filter(([name])=>canSeeStaff(name)).map(([name,col])=>`<div class="cal-staff-row"><div class="staff-dot" style="background:${col}"></div>${name}</div>`).join('')}
+      ${Object.entries(STAFF_COLORS).filter(([name])=>visibleToMe(name)).map(([name,col])=>`<div class="cal-staff-row"><div class="staff-dot" style="background:${col}"></div>${name}</div>`).join('')}
       <div class="cal-legend">
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(250,199,117,0.25);border-left:3px solid #fac775"></div>Demo</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(116,185,255,0.18);border-left:3px solid #74b9ff"></div>Meeting</div>
