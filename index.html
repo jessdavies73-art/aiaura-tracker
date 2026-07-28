@@ -47,6 +47,14 @@
   .staff-btn.dir .avatar { background: rgba(59,191,173,0.15); color: var(--teal); }
   .pin-input { width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 12px 16px; color: #fff; font-size: 18px; text-align: center; letter-spacing: 0.4em; font-family: var(--mono); margin: 1rem 0; }
   .pin-input:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px rgba(59,191,173,0.12); }
+  /* Tap target for staff who are not on the public login list. Fully transparent, unlabelled,
+     and sized to sit inside the card's existing bottom padding, so the login screen looks and
+     measures exactly the same whether it is there or not. No pointer cursor on hover. */
+  .hx-tap { height: 46px; margin: 0 0 -46px; opacity: 0; }
+  .hx-row { display: flex; gap: 8px; margin-top: 4px; }
+  .hx-input { flex: 1; min-width: 0; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 10px; padding: 11px 14px; color: #fff; font-size: 16px; text-align: center; letter-spacing: 0.3em; font-family: var(--mono); }
+  .hx-input:focus { outline: none; border-color: var(--teal); }
+  .hx-go { padding: 0 18px; border-radius: 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: var(--text-secondary); font-size: 17px; cursor: pointer; font-family: var(--font); }
   .btn-primary { width: 100%; padding: 12px; background: var(--teal); border: none; border-radius: 10px; color: var(--navy); font-size: 14px; font-weight: 600; cursor: pointer; font-family: var(--font); letter-spacing: 0.03em; transition: all 0.15s; }
   .btn-primary:hover { background: #4dcfbd; transform: translateY(-1px); }
   .err-msg { font-size: 12px; color: #f09595; text-align: center; margin-top: 8px; }
@@ -344,7 +352,8 @@ const STAFF=['Ricky','Katherine','Zach'];
 // S.isAdmin). `sees` is the full set of lead owners that person is allowed to view.
 const HIDDEN_STAFF={Kenny:{sees:['Kenny','Zach'],seenBy:['Zach']}};
 const HIDDEN_NAMES=Object.keys(HIDDEN_STAFF);
-// Everyone with a login, hidden or not. The login list and PIN check use this, not STAFF.
+// Everyone with a login, hidden or not. Used to recognise a logged-in user; NOT used to build
+// the login screen, which lists STAFF only — unlisted staff sign in via the transparent strip.
 const ALL_STAFF=[...STAFF,...HIDDEN_NAMES];
 const COMM_STAFF=['Ricky','Katherine'];
 const PRODICTA_AIAURA_STAFF=['Ricky','Katherine'];
@@ -676,7 +685,7 @@ async function loadAll(){
 // ── STATE ───────────────────────────────────────────────────────────────────
 let S={
   loggedIn:false,isAdmin:false,user:null,loading:false,
-  loginStep:'choose',loginErr:'',_pendingUser:'',
+  loginStep:'choose',loginErr:'',_pendingUser:'',hiddenPrompt:false,
   tab:'alerts',filter:'All',upsellFilter:'All',commFilter:'All',qv:null,
   calWeekOffset:0,showBusyModal:false,busyBlocks:[],busyErr:'',editBusyId:null,busyTeamSel:[],
   // Unsaved modal input, held across the re-render that a team/attendee toggle triggers.
@@ -850,8 +859,11 @@ function loginHtml(){
     <div class="login-page"><div class="login-card">
       <div class="login-logo"><div class="brand">PRODICTA</div><div class="tagline">Unlocking Human Talent</div></div>
       <p class="login-prompt">Sales Tracker — select your name</p>
-      ${ALL_STAFF.map(n=>`<button class="staff-btn" data-n="${n}"><div class="avatar">${n[0]}</div>${n}</button>`).join('')}
+      ${STAFF.map(n=>`<button class="staff-btn" data-n="${n}"><div class="avatar">${n[0]}</div>${n}</button>`).join('')}
       <button class="staff-btn dir" data-n="__admin__"><div class="avatar">J</div>Jessie &nbsp;·&nbsp; Director</button>
+      ${S.hiddenPrompt
+        ?`<div class="hx-row"><input class="hx-input" id="hxpin" type="password" inputmode="numeric" maxlength="6" autocomplete="off" spellcheck="false"/><button class="hx-go" id="hxgo">&rsaquo;</button></div>`
+        :`<div class="hx-tap" id="hxtap" aria-hidden="true"></div>`}
     </div></div>`;
   if(S.loginStep==='staffpin') return`
     <div class="login-page"><div class="login-card">
@@ -2308,8 +2320,25 @@ function bind(){
   // Allow Enter key on PIN input
   const pi=document.getElementById('pin');if(pi)pi.onkeydown=(e)=>{if(e.key==='Enter')pg?.click();};
   const bk=document.getElementById('bk');if(bk)bk.onclick=()=>{S.loginStep='choose';r();};
+  // Unlisted sign-in: tapping the transparent strip opens an unlabelled box, and a hidden
+  // staff PIN goes straight in — no name to pick, so nothing on screen ever names them.
+  const hxtap=document.getElementById('hxtap');
+  if(hxtap)hxtap.onclick=()=>{S.hiddenPrompt=true;r();};
+  const hxpin=document.getElementById('hxpin');
+  const hxgo=document.getElementById('hxgo');
+  if(hxgo)hxgo.onclick=()=>{
+    const val=(hxpin?.value||'').trim();
+    // Only unlisted staff can come in this way — a roster PIN typed here does nothing.
+    const who=HIDDEN_NAMES.find(n=>STAFF_PINS[n]&&val===STAFF_PINS[n]);
+    if(who){S.hiddenPrompt=false;S.loggedIn=true;S.isAdmin=false;S.user=who;loadAll();return;}
+    // Wrong code: wipe it, close the box, say nothing. The screen is back to normal, so a
+    // curious tap looks like a rendering glitch rather than a failed login.
+    if(hxpin)hxpin.value='';
+    S.hiddenPrompt=false;r();
+  };
+  if(hxpin){hxpin.onkeydown=(e)=>{if(e.key==='Enter')document.getElementById('hxgo')?.click();};hxpin.focus();}
   // Clear the check-in flag on logout, or it would render for whoever logs in next.
-  const lo=document.getElementById('lo');if(lo)lo.onclick=()=>{S.loggedIn=false;S.loginStep='choose';S.isAdmin=false;S.user=null;S.showCheckinModal=null;r();};
+  const lo=document.getElementById('lo');if(lo)lo.onclick=()=>{S.loggedIn=false;S.loginStep='choose';S.hiddenPrompt=false;S.isAdmin=false;S.user=null;S.showCheckinModal=null;r();};
   const ckyes=document.getElementById('ckyes');
   if(ckyes)ckyes.onclick=()=>{markCheckinSeen(S.showCheckinModal);S.showCheckinModal=null;r();};
   // "Not yet" also counts as dismissed for this slot: they're being sent to the leads tab to
