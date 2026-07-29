@@ -353,6 +353,8 @@
   .gc-note-form button { background: rgba(255,205,60,0.1); border: 1px solid rgba(255,205,60,0.35); border-radius: 6px; color: #ffcd3c; font-size: 11px; cursor: pointer; padding: 0 12px; white-space: nowrap; font-family: var(--font); }
   .gc-note-form button:hover { background: rgba(255,205,60,0.22); color: #fff; }
   .gc-empty { font-size: 13px; color: var(--text-muted); padding: 1.25rem 0; }
+  .gc-room-link { color: var(--teal); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+  .gc-room-link:hover { color: #4dcfbd; }
   .cal-staff-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-secondary); }
   .staff-dot { width: 8px; height: 8px; border-radius: 50%; }
   .ricky-dot { background: #3bbfad; }
@@ -1762,7 +1764,7 @@ function groupCallModal(){
   }).join('');
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit group call':'Schedule group call'}</h3>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Everyone joins the same room: <span style="color:var(--teal)">${GROUP_CALL_ROOM}</span></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Everyone joins using this link: <a class="gc-room-link" href="${GROUP_CALL_ROOM}" target="_blank" rel="noopener">Join PRODICTA Sales Team call</a></div>
     <div class="form-field"><label class="form-label">Date and time</label><input type="datetime-local" id="gcdt" value="${gcEsc(dtVal)}"/></div>
     <div class="form-field"><label class="form-label">Agenda</label><textarea id="gcagenda" placeholder="What will be covered on this call?">${gcEsc(agendaVal)}</textarea></div>
     <div class="form-field">
