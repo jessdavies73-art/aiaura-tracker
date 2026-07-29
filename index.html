@@ -143,7 +143,6 @@
   .b-starter { background: rgba(59,191,173,0.15); color: #3bbfad; }
   .b-professional { background: rgba(162,155,254,0.18); color: #b2acfe; }
   .b-unlimited { background: rgba(77,232,212,0.15); color: #4de8d4; }
-  .b-founding { background: rgba(250,199,117,0.15); color: #fac775; }
   .b-new { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.55); }
   .b-upsell { background: rgba(59,191,173,0.12); color: #3bbfad; }
   .b-agency { background: rgba(250,199,117,0.12); color: #fac775; }
@@ -366,7 +365,7 @@
 <body>
 <div id="root"></div>
 <script>
-const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50},Founding:{c:30}};
+const PLANS={Starter:{c:30},Professional:{c:40},Unlimited:{c:50}};
 const UB=40;
 const STAFF=['Ricky','Katherine','Zach'];
 // Staff kept off the public roster. They log in normally, but their name and their leads are
@@ -426,7 +425,7 @@ const SEND_INVITE_URL='https://aiaura-tracker-api.vercel.app/api/send-invite';
 const STATUSES=['Contacted','Demo booked','Converted','Partnership','Lost'];
 // Busy-block types where "More information" is optional; every other type requires it.
 const BUSY_MOREINFO_OPTIONAL=['networking','busy'];
-const UPSELL_PLANS=['Starter','Professional','Unlimited','Founding'];
+const UPSELL_PLANS=['Starter','Professional','Unlimited'];
 const LEAD_SOURCES=['LinkedIn','Referral','Networking event','Cold outreach','Website','Email campaign','Phone call','Other'];
 const LOSS_REASONS=['Price too high','Wrong timing','Went with competitor','No response','Not interested','Budget cut','Other'];
 
@@ -434,7 +433,6 @@ const LOSS_REASONS=['Price too high','Wrong timing','Went with competitor','No r
 const COMM_RATES={
   PRODICTA:{
     plans:{
-      Founding:{price:79,signup:30,tier:'flat'},
       Starter:{price:49,signup:30,tier:'flat'},
       Professional:{price:120,signup:40,tier:'flat'},
       Unlimited:{price:159,signup:50,tier:'flat'}
