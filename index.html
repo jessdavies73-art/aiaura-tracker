@@ -719,7 +719,7 @@ async function loadAll(){
       month:b.month||'',note:b.note||'',date:b.date||''
     }));
     S.groupCalls=(groupCalls||[]).map(g=>({
-      id:g.id,dt:utcToLocal(g.scheduled_dt),agenda:g.agenda||'',
+      id:g.id,dt:utcToLocal(g.scheduled_dt),end:g.end_dt?utcToLocal(g.end_dt):'',agenda:g.agenda||'',
       notes:g.notes||'',createdBy:g.created_by||'',
       // Rows written before the attendees column existed have no list; treat that as "everyone"
       // rather than "nobody", which is what they meant when they were scheduled.
@@ -1539,7 +1539,10 @@ function calendarTab(){
         if(!sameLocalDay(gs,day))return;
         // Attendees ride in on `team`, which the renderer already draws as a suffix on the chip
         // and folds into the tooltip. They are always roster names, so nothing to filter.
-        evts.push({type:'groupcall',start:gs,durationMins:GROUP_CALL_MINS,label:`Group call${g.agenda?' · '+g.agenda:''}`,moreInfo:g.createdBy?`Scheduled by ${g.createdBy}`:'',team:Array.isArray(g.attendees)?g.attendees:[],id:g.id,meetLink:GROUP_CALL_ROOM,color:'#ffcd3c'});
+        const ge=new Date(gcEndDt(g));
+        const mins=(!isNaN(ge)&&ge>gs)?Math.round((ge-gs)/60000):GROUP_CALL_MINS;
+        const range=isNaN(ge)?fmtInviteTime(g.dt):`${fmtInviteTime(g.dt)}-${fmtInviteTime(ge)}`;
+        evts.push({type:'groupcall',start:gs,durationMins:mins,label:`Group call ${range}${g.agenda?' · '+g.agenda:''}`,moreInfo:g.createdBy?`Scheduled by ${g.createdBy}`:'',team:Array.isArray(g.attendees)?g.attendees:[],id:g.id,meetLink:GROUP_CALL_ROOM,color:'#ffcd3c'});
       });
     }
     return evts;
@@ -1704,6 +1707,24 @@ function busyModal(){
 // One standing room for the whole team, so a group call carries no lead, no products and no
 // owner beyond whoever put it in the diary.
 function gcEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// A Date as the 'YYYY-MM-DDTHH:MM' a datetime-local input expects, in local time.
+function gcLocalInput(d){const p=n=>String(n).padStart(2,'0');return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;}
+// Rows scheduled before end_dt existed have a start only, so they fall back to the hour the
+// calendar was already assuming for them.
+function gcEndDt(g){
+  if(g&&g.end)return g.end;
+  const s=g&&g.dt?new Date(g.dt):null;
+  return(s&&!isNaN(s))?gcLocalInput(new Date(s.getTime()+GROUP_CALL_MINS*60000)):'';
+}
+// "Wed, 5 August 2026 · 14:00 to 15:00", or with the date repeated if it runs past midnight.
+function gcWhen(g){
+  const end=gcEndDt(g);
+  if(!end)return`${fmtInviteDate(g.dt)} · ${fmtInviteTime(g.dt)}`;
+  const sameDay=new Date(g.dt).toDateString()===new Date(end).toDateString();
+  return sameDay
+    ?`${fmtInviteDate(g.dt)} · ${fmtInviteTime(g.dt)} to ${fmtInviteTime(end)}`
+    :`${fmtInviteDate(g.dt)} · ${fmtInviteTime(g.dt)} to ${fmtInviteDate(end)} · ${fmtInviteTime(end)}`;
+}
 
 function groupCallsTab(){
   const now=new Date();
@@ -1714,7 +1735,7 @@ function groupCallsTab(){
   const card=(g,isPast)=>`<div class="gc-card ${isPast?'past':''}">
     <div class="gc-top">
       <div style="flex:1;min-width:200px">
-        <div class="gc-dt">${gcEsc(fmtInviteDate(g.dt))} · ${gcEsc(fmtInviteTime(g.dt))}</div>
+        <div class="gc-dt">${gcEsc(gcWhen(g))}</div>
         ${g.agenda?`<div class="gc-agenda">${gcEsc(g.agenda)}</div>`:`<div class="gc-agenda" style="color:var(--text-muted)">No agenda set.</div>`}
         <div class="gc-meta">👥 ${gcEsc(g.attendees&&g.attendees.length?g.attendees.join(', '):'No one ticked as attending')}</div>
         <div class="gc-meta">Scheduled by ${gcEsc(g.createdBy||'unknown')}</div>
@@ -1744,8 +1765,7 @@ function groupCallsTab(){
   </div>`;}
 
 function groupCallModal(){
-  const pad=n=>String(n).padStart(2,'0');
-  const localDt=(offset=0)=>{const d=new Date(Date.now()+offset);return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+  const localDt=(offset=0)=>gcLocalInput(new Date(Date.now()+offset));
   const existing=S.editGroupCallId?(S.groupCalls||[]).find(g=>g.id===S.editGroupCallId):null;
   const editing=!!existing;
   // Unsaved input from before an attendee toggle wins; '' is a real value the user chose, so
@@ -1753,6 +1773,7 @@ function groupCallModal(){
   const snap=S.gcFormSnap||{};
   const keep=(k,dflt)=>snap[k]===undefined?dflt:snap[k];
   const dtVal=keep('dt',editing?existing.dt:localDt(3600000));
+  const endVal=keep('end',editing?gcEndDt(existing):localDt(3600000+GROUP_CALL_MINS*60000));
   const agendaVal=keep('agenda',editing?existing.agenda:'');
   const selected=Array.isArray(S.gcAttendeesSel)?S.gcAttendeesSel:[];
   const attendeeButtons=GROUP_CALL_MEMBERS.map(n=>{
@@ -1765,7 +1786,10 @@ function groupCallModal(){
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit group call':'Schedule group call'}</h3>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Everyone joins using this link: <a class="gc-room-link" href="${GROUP_CALL_ROOM}" target="_blank" rel="noopener">Join PRODICTA Sales Team call</a></div>
-    <div class="form-field"><label class="form-label">Date and time</label><input type="datetime-local" id="gcdt" value="${gcEsc(dtVal)}"/></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-field"><label class="form-label">From</label><input type="datetime-local" id="gcdt" value="${gcEsc(dtVal)}"/></div>
+      <div class="form-field"><label class="form-label">To</label><input type="datetime-local" id="gcend" value="${gcEsc(endVal)}"/></div>
+    </div>
     <div class="form-field"><label class="form-label">Agenda</label><textarea id="gcagenda" placeholder="What will be covered on this call?">${gcEsc(agendaVal)}</textarea></div>
     <div class="form-field">
       <label class="form-label">Who is attending?</label>
@@ -2432,7 +2456,7 @@ function snapshotDemoForm(){
 }
 function snapshotGroupCallForm(){
   if(!document.getElementById('gcdt'))return; // modal not open
-  S.gcFormSnap={dt:snapField('gcdt'),agenda:snapField('gcagenda')};
+  S.gcFormSnap={dt:snapField('gcdt'),end:snapField('gcend'),agenda:snapField('gcagenda')};
 }
 window.__toggleGroupCallAttendee=function(n){
   snapshotGroupCallForm();
@@ -2969,16 +2993,36 @@ function bind(){
     await dbDelete('tracker_group_calls',S.editGroupCallId);
     S.showGroupCallModal=false;S.editGroupCallId=null;S.groupCallErr='';S.gcAttendeesSel=[];S.gcFormSnap=null;await loadAll();
   };
+  // Moving the start drags the end with it, keeping whatever length is already on the form.
+  // Done by writing straight to the input rather than re-rendering, so the field keeps focus.
+  const gcdtEl=document.getElementById('gcdt');
+  if(gcdtEl){
+    S._gcPrevStart=gcdtEl.value;
+    gcdtEl.onchange=()=>{
+      const endEl=document.getElementById('gcend');
+      if(!endEl||!gcdtEl.value)return;
+      const start=new Date(gcdtEl.value);
+      if(isNaN(start))return;
+      const prevStart=S._gcPrevStart?new Date(S._gcPrevStart):null;
+      const prevEnd=endEl.value?new Date(endEl.value):null;
+      const mins=(prevStart&&prevEnd&&!isNaN(prevStart)&&!isNaN(prevEnd)&&prevEnd>prevStart)
+        ?Math.round((prevEnd-prevStart)/60000):GROUP_CALL_MINS;
+      endEl.value=gcLocalInput(new Date(start.getTime()+mins*60000));
+      S._gcPrevStart=gcdtEl.value;
+    };
+  }
   const gcsv=document.getElementById('gcsv');
   if(gcsv)gcsv.onclick=async()=>{
     const dt=document.getElementById('gcdt').value;
+    const end=document.getElementById('gcend').value;
     const agenda=document.getElementById('gcagenda').value.trim();
     // A failed save re-renders with the error and leaves the modal open, so the typed values
     // have to survive it — otherwise the user is told to retype what they just lost.
     snapshotGroupCallForm();
-    if(!dt){S.groupCallErr='Please set a date and time.';r();return;}
+    if(!dt||!end){S.groupCallErr='Please set a start and end time.';r();return;}
+    if(new Date(end)<=new Date(dt)){S.groupCallErr='End time must be after start time.';r();return;}
     if(!S.gcAttendeesSel.length){S.groupCallErr='Tick at least one person as attending.';r();return;}
-    const payload={scheduled_dt:saveLocalDt(dt),agenda,attendees:S.gcAttendeesSel};
+    const payload={scheduled_dt:saveLocalDt(dt),end_dt:saveLocalDt(end),agenda,attendees:S.gcAttendeesSel};
     try{
       if(S.editGroupCallId){await dbPatch('tracker_group_calls',S.editGroupCallId,payload);}
       else{await dbPost('tracker_group_calls',{...payload,created_by:S.user||''});}
