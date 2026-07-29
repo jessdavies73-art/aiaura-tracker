@@ -752,7 +752,7 @@ let S={
   gcAttendeesSel:[],gcFormSnap:null,
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
   leads:[],upsells:[],signups:[],bonuses:[],
-  _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{},
+  _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{},objRoleType:'',
   callType:'Agency',callProd:'PRODICTA',inCall:false,callMessages:[],callLoading:false,callProspectInput:'',
   callActive:false,callType:'Agency',callProduct:'PRODICTA',
   callHistory:[],callInput:'',callLoading:false,callStage:'start'
@@ -2149,6 +2149,30 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
+// Sector-specific answers for the physical/manual objection. Keyed by the label
+// shown in the dropdown; insertion order is the order the options render in.
+const PHYSICAL_ROLE_RESPONSES={
+  "Care / Healthcare":"PRODICTA builds every scenario from the actual job description. A care worker gets a realistic safeguarding situation, a scenario about managing a distressed resident, or a time-pressured morning round. Not a personality quiz. Not a generic test. Real situations that match the job. Safeguarding is not something you can test in an interview. You can ask someone what they would do but you cannot see what they actually do under pressure. PRODICTA puts care candidates into realistic safeguarding scenarios and measures their actual response. For CQC-registered providers, having a documented evidence-based assessment process for every hire also gives you an audit trail that shows your hiring decisions were objective and defensible. For volume care hiring, the Starter plan at £99 a month with your first 30 days at just £49 covers 10 assessments. Speed-Fit takes 15 minutes and gives you a full performance report before anyone sets foot in an interview. Worth a 20 minute demo to see how it works for care roles?",
+  "Construction / Trades":"A scaffolder, site manager or electrician gets a scenario built around what their day actually looks like. Safety decisions under pressure. Prioritising jobs when materials are delayed. Handling a difficult subcontractor. Health and safety compliance is non-negotiable on site. PRODICTA can include safety decision scenarios built from your specific role, how a candidate responds when a shortcut is suggested, how they handle a near-miss, whether they follow procedure under pressure. For employers with HSE responsibilities, the assessment report gives you a documented record of every candidate decision making before they set foot on site. Speed-Fit at 15 minutes gives you a ranked list without days of interviewing. Starter plan is £99 a month with your first 30 days at just £49. Worth a 20 minute demo?",
+  "Warehouse / Logistics":"High volume, fast turnaround, and the cost of a bad hire shows up immediately in productivity and team morale. PRODICTA puts warehouse candidates through scenarios around prioritisation, pressure, accuracy and team communication, all built from the actual role. Speed-Fit takes 15 minutes. You send one link to every candidate, get a ranked report back within minutes, and shortlist in hours instead of days. Starter plan covers 10 assessments at £99 a month with your first 30 days at just £49. Worth seeing how it works for your warehouse roles?",
+  "Retail":"Customer handling, pressure at the till, stock decisions, shift conflicts. PRODICTA builds scenarios from the job description so a retail candidate gets situations that match their actual role, not a generic customer service test. Speed-Fit takes 15 minutes and tells you how someone actually performs under retail pressure before you put them on the shop floor. For seasonal hiring where you need to screen quickly, the Starter plan at £99 a month with your first 30 days at just £49 means you can assess your candidates without paying per head. Worth a 20 minute demo?",
+  "Hospitality / Catering":"A chef gets a kitchen pressure scenario. Front of house gets a difficult customer situation mid-service. Bar staff get a conflict resolution moment. Every scenario is built from the job description so candidates face real situations, not abstract questions. Speed-Fit takes 15 minutes and costs less than the first hour of a bad hire's wage. Starter plan is £99 a month with your first 30 days at just £49. Worth seeing how it works for your hospitality roles?",
+  "Driving / Transport":"Route decisions, delivery conflicts, customer complaints, time pressure. PRODICTA puts driving and transport candidates through realistic scenarios built from their actual role. It is not a theory test. It measures judgement, communication and reliability under pressure. For fleet hiring where consistency matters, Speed-Fit at 15 minutes gives you evidence before you hand someone the keys. Starter plan is £99 a month with your first 30 days at just £49. Worth a 20 minute demo?",
+  "Cleaning / Facilities":"Reliability, communication, problem solving when something goes wrong on site. PRODICTA builds scenarios from the job description so a cleaning operative or facilities manager gets situations that match their actual role. Speed-Fit takes 15 minutes and gives you performance data before interview. For volume cleaning contracts where you are hiring regularly, the Starter plan at £99 a month with your first 30 days at just £49 covers 10 assessments. Worth seeing how it works?",
+  "Manufacturing":"Accuracy, process adherence, safety awareness, team communication on the line. PRODICTA builds manufacturing scenarios from the actual job so candidates face real decisions, not hypothetical questions. Speed-Fit takes 15 minutes. For production hiring where getting the wrong person affects output immediately, having performance data before interview changes the decision completely. Starter plan is £99 a month with your first 30 days at just £49. Worth a 20 minute demo?",
+  "Hairdressing / Beauty":"Client handling, difficult conversations, time management between appointments, upselling without pressure. PRODICTA builds scenarios from the job description so a stylist or beauty therapist gets situations that match their actual working day. Speed-Fit takes 15 minutes and gives you insight into how someone handles clients before they sit in your chair. For salons hiring regularly, the Starter plan at £99 a month with your first 30 days at just £49 covers 10 assessments. Worth a quick demo?",
+  "Security":"Conflict de-escalation, judgement under pressure, communication with the public, following procedure when things go wrong. For SIA-licensed roles, judgement in a safeguarding or conflict situation can have serious legal consequences. PRODICTA scenarios can include public safety decisions, use of force judgement calls, and lone working situations. The report gives you documented evidence of how a candidate responded before you deploy them. Speed-Fit takes 15 minutes. For volume security hiring where reliability and judgement are non-negotiable, the Starter plan at £99 a month with your first 30 days at just £49 gives you performance data before you deploy anyone. Worth a 20 minute demo?",
+  "Other manual role":"PRODICTA builds every scenario from the actual job description, whatever the role. Physical and manual jobs often get ignored by assessment tools built for office workers. PRODICTA works for any role at any level because the scenarios come from the job itself, not from a generic template. Speed-Fit takes 15 minutes. Starter plan is £99 a month with your first 30 days at just £49. Worth a 20 minute demo to see how it works for your specific roles?"
+};
+
+// Shared by the Agency and Employer lists — the answers do not differ by audience.
+const OBJ_SENIOR_TRACK_RECORD={q:"Our senior candidates have a proven track record, we know their history",a:"Track record tells you what someone has done in a different organisation, under different leadership, with different resources. It does not tell you how they will perform in your specific environment, under your specific pressures, with your specific team. The higher the role, the higher the cost of getting it wrong. A bad senior hire can cost six figures when you factor in disruption, lost clients and rehiring. Strategy-Fit takes 45 minutes and puts candidates into the exact leadership scenarios they will face in your role. It does not replace their track record. It tells you whether that track record will translate here. Worth a 20 minute demo to see how it works for leadership roles?"};
+const OBJ_PHYSICAL_ROLE={
+  q:"This is for a physical or manual job, how does this work for that?",
+  a:"PRODICTA builds every scenario from the actual job description, so it works for physical and manual roles exactly the way it works for office roles. The candidate faces the situations their day is actually made of, not an abstract test written for someone at a desk.",
+  roleTypes:PHYSICAL_ROLE_RESPONSES
+};
+
 const OBJECTIONS={
   PRODICTA:{
     Agency:[
@@ -2164,7 +2188,9 @@ const OBJECTIONS={
       {q:"We're a small team, this feels like overkill",a:"It is actually designed for small teams. You do not need an HR department or dedicated resource. Candidates get a link, complete the assessment, and you get a report. The Starter plan at £49 a month covers 10 assessments, enough for a small team to use it on their most important roles. And for occasional hiring, Rapid Screen at £6 per assessment means you can screen candidates properly with no monthly commitment at all."},
       {q:"How will this benefit my clients?",a:"Your clients pay your fee expecting the right person. When a hire goes wrong they do not just lose money. They lose confidence in your agency. PRODICTA gives your clients a branded report for every candidate you put forward, showing performance scores, strengths with evidence, watch-outs to manage and a clear hiring recommendation. They see exactly how each candidate performed before interview. That is a level of transparency and professionalism that sets you apart from every other agency they work with."},
       {q:"We deal with a lot of candidates at once, how can it help?",a:"That is exactly where PRODICTA makes the biggest difference. When you have 50 CVs for one role, the bottleneck is always the same. Someone has to read them all, filter them down and decide who to interview. PRODICTA flips that. You send the assessment link to everyone who meets the basic criteria and within minutes you have a ranked list with scores, strengths, watch-outs and a hiring recommendation for each one. For very high volume roles, Rapid Screen takes just 5-8 minutes per candidate at £6 per assessment. Use Rapid Screen to screen the full pool, then PRODICTA on your shortlist for deeper insight. Bulk Invite sends assessments to multiple candidates in one click. Auto-Shortlist surfaces the strongest candidates automatically."},
-      {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes just 15 minutes and is designed specifically for operational and volume roles. A care worker, a warehouse operative, a customer service agent, a sales rep, all get a scenario built from their actual job description at the right level of complexity. You are not putting a receptionist through a boardroom conflict scenario. For roles where even 15 minutes feels too long, Rapid Screen delivers a real-work test in 5-8 minutes at just £6 per assessment. No subscription needed. It is the perfect entry point for high-volume, lower-level hiring."}
+      {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes just 15 minutes and is designed specifically for operational and volume roles. A care worker, a warehouse operative, a customer service agent, a sales rep, all get a scenario built from their actual job description at the right level of complexity. You are not putting a receptionist through a boardroom conflict scenario. For roles where even 15 minutes feels too long, Rapid Screen delivers a real-work test in 5-8 minutes at just £6 per assessment. No subscription needed. It is the perfect entry point for high-volume, lower-level hiring."},
+      OBJ_SENIOR_TRACK_RECORD,
+      OBJ_PHYSICAL_ROLE
     ],
     Employer:[
       {q:"How will this benefit our company?",a:"Every hire you make is a risk. If it works out, great. If it does not, you are looking at between £12,000 and £30,000 in lost productivity, recruitment costs and management time. PRODICTA sits between that risk and your decision. Before you offer someone the role, you see exactly how they perform under real pressure, how they prioritise, how they handle conflict and how they communicate. You stop hiring on hope and start hiring on evidence. The result is fewer bad hires, faster onboarding and a team that actually performs the way you expected."},
@@ -2176,16 +2202,24 @@ const OBJECTIONS={
       {q:"How does this help us with Employment Rights Act 2025?",a:"From January 2027, every dismissal in the first six months carries legal risk with no compensation cap. If a hire does not work out and you cannot demonstrate that your selection process was objective, fair and evidence-based, you are exposed. PRODICTA generates a documented audit trail for every hire, showing exactly what the candidate was assessed on, how they performed and what the data said before you made your decision. That documentation is your protection if a decision is ever challenged."},
       {q:"We've had bad hires before but it's just part of hiring",a:"It does not have to be. Bad hires happen when the information available at the point of decision is not good enough. A CV tells you what someone has done. An interview tells you how someone presents. Neither tells you how someone actually works under pressure in your specific role. PRODICTA closes that gap. It is not a guarantee, but it shifts the odds significantly in your favour by giving you real performance data before you commit."},
       {q:"We deal with a lot of candidates at once, how can it help?",a:"When you have a high volume of applicants, the screening bottleneck costs you time and risks good candidates slipping through. For high volume roles, Rapid Screen gives every candidate a 5-8 minute real-work test at just £6 per assessment with no subscription. You get a ranked list in minutes. Use Rapid Screen to screen the full pool, then PRODICTA on your final shortlist for deeper insight before interview. Bulk Invite and Auto-Shortlist mean you manage the whole process from one dashboard."},
-      {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes 15 minutes and is designed for operational roles. For roles where even 15 minutes feels like too much, Rapid Screen delivers a real-work test in 5-8 minutes at £6 per assessment. No subscription needed. It is specifically built for entry-level and volume hiring where you need speed without sacrificing the ability to identify who can actually do the job."}
+      {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes 15 minutes and is designed for operational roles. For roles where even 15 minutes feels like too much, Rapid Screen delivers a real-work test in 5-8 minutes at £6 per assessment. No subscription needed. It is specifically built for entry-level and volume hiring where you need speed without sacrificing the ability to identify who can actually do the job."},
+      OBJ_SENIOR_TRACK_RECORD,
+      OBJ_PHYSICAL_ROLE
     ]
   }
 };
+
+// A response is copied from an inline onclick, so it lands inside a single-quoted
+// JS string that itself sits inside a double-quoted HTML attribute. Both quote
+// styles and the backslash have to survive that.
+function copyArg(s){return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\r?\n/g,'\\n');}
 
 function objectionsTab(){
   const prod=S.objProd||'PRODICTA';
   const type=S.objType||'Agency';
   const objList=OBJECTIONS[prod]?.[type]||[];
   const expanded=S.objExpanded||{};
+  const roleType=S.objRoleType||'';
 
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Objection Handler</span></div>
@@ -2212,7 +2246,21 @@ function objectionsTab(){
           </div>
           ${isOpen?`<div style="padding:0 16px 16px;font-size:13px;color:var(--text-secondary);line-height:1.7;border-top:1px solid var(--border)">
             <div style="padding-top:14px">${o.a}</div>
-            <button class="action-btn" style="margin-top:12px;font-size:11px;padding:4px 12px" onclick="navigator.clipboard.writeText('${o.a.replace(/'/g,"\\'")}')">Copy response</button>
+            <button class="action-btn" style="margin-top:12px;font-size:11px;padding:4px 12px" onclick="navigator.clipboard.writeText('${copyArg(o.a)}')">Copy response</button>
+            ${o.roleTypes?`
+            <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+              <div class="form-field" style="max-width:320px;margin-bottom:0">
+                <label class="form-label">Select the role type</label>
+                <select data-objrole>
+                  <option value="">Choose a role type</option>
+                  ${Object.keys(o.roleTypes).map(rt=>`<option value="${rt}" ${roleType===rt?'selected':''}>${rt}</option>`).join('')}
+                </select>
+              </div>
+              ${o.roleTypes[roleType]?`<div style="margin-top:14px;padding:14px 16px;background:var(--navy-card);border:1px solid var(--border);border-radius:10px">
+                <div>${o.roleTypes[roleType]}</div>
+                <button class="action-btn" style="margin-top:12px;font-size:11px;padding:4px 12px" onclick="navigator.clipboard.writeText('${copyArg(o.roleTypes[roleType])}')">Copy response</button>
+              </div>`:''}
+            </div>`:''}
           </div>`:''}
         </div>`;
       }).join('')}
@@ -2798,6 +2846,7 @@ function bind(){
   };
   document.querySelectorAll('[data-objtype]').forEach(b=>b.onclick=()=>{S.objType=b.dataset.objtype;S.objExpanded={};r();});
   document.querySelectorAll('[data-objexp]').forEach(b=>b.onclick=()=>{const k=b.dataset.objexp;S.objExpanded=S.objExpanded||{};S.objExpanded[k]=!S.objExpanded[k];r();});
+  document.querySelectorAll('[data-objrole]').forEach(sel=>sel.onchange=()=>{S.objRoleType=sel.value;r();});
 
   // Mic button for call script
   const micbtn=document.getElementById('micbtn');
