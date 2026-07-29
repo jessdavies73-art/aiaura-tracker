@@ -333,6 +333,26 @@
   .cal-event.busy-discovery { background: rgba(225,123,214,0.18); border-left: 3px solid #e17bd6; color: #e17bd6; }
   .cal-event.busy-busy { background: rgba(255,118,117,0.15); border-left: 3px solid #ff7675; color: #ff7675; }
   .cal-event.busy-other { background: rgba(255,255,255,0.08); border-left: 3px solid rgba(255,255,255,0.3); color: var(--text-secondary); }
+  /* Group calls get their own gold so they never read as one person's demo or busy block. */
+  .cal-event.groupcall { background: rgba(255,205,60,0.22); border-left: 3px solid #ffcd3c; color: #ffcd3c; }
+
+  /* GROUP CALLS */
+  .gc-card { background: var(--navy-mid); border: 1px solid rgba(255,205,60,0.25); border-left: 3px solid #ffcd3c; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .gc-card.past { border-color: var(--border); border-left-color: rgba(255,205,60,0.35); opacity: 0.85; }
+  .gc-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .gc-dt { font-size: 14px; font-weight: 600; color: #ffcd3c; }
+  .gc-agenda { font-size: 13px; color: var(--text-primary); margin-top: 6px; white-space: pre-wrap; }
+  .gc-meta { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .gc-join { display: inline-block; font-size: 12px; font-weight: 600; padding: 7px 16px; border-radius: 8px; background: rgba(59,191,173,0.12); border: 1px solid rgba(59,191,173,0.4); color: var(--teal); text-decoration: none; font-family: var(--font); white-space: nowrap; transition: all 0.15s; }
+  .gc-join:hover { background: var(--teal); color: var(--navy); }
+  .gc-notes { font-size: 12px; color: var(--text-secondary); margin-top: 8px; padding-left: 10px; border-left: 2px solid rgba(255,205,60,0.3); white-space: pre-wrap; }
+  .gc-note-form { display: flex; gap: 6px; margin-top: 8px; }
+  .gc-note-form textarea { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; padding: 7px 10px; color: #fff; font-size: 12px; resize: vertical; height: 52px; font-family: var(--font); }
+  .gc-note-form textarea::placeholder { color: var(--text-muted); }
+  .gc-note-form textarea:focus { outline: none; border-color: rgba(255,205,60,0.45); }
+  .gc-note-form button { background: rgba(255,205,60,0.1); border: 1px solid rgba(255,205,60,0.35); border-radius: 6px; color: #ffcd3c; font-size: 11px; cursor: pointer; padding: 0 12px; white-space: nowrap; font-family: var(--font); }
+  .gc-note-form button:hover { background: rgba(255,205,60,0.22); color: #fff; }
+  .gc-empty { font-size: 13px; color: var(--text-muted); padding: 1.25rem 0; }
   .cal-staff-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-secondary); }
   .staff-dot { width: 8px; height: 8px; border-radius: 50%; }
   .ricky-dot { background: #3bbfad; }
@@ -375,6 +395,17 @@ const MEET_ROOMS={
   Linka:'https://meet.jit.si/AIAURASales',
   Firelynx:'https://meet.jit.si/AIAURASales'
 };
+// Standing room for the internal sales team call. Not a client room — never offered on a demo.
+const GROUP_CALL_ROOM='https://meet.jit.si/PRODICTASalesTeam';
+// The table stores a start time only, so the calendar needs an assumed length to draw a block.
+const GROUP_CALL_MINS=60;
+// Who can see and organise group calls (Jessie is covered by S.isAdmin, not listed here).
+const GROUP_CALL_STAFF=['Ricky','Katherine'];
+// Who sees group calls on the calendar. Zach attends but does not organise, so he is here and
+// not above. Kenny is on neither list and must not see a group call anywhere in the UI.
+const GROUP_CALL_CAL_STAFF=['Ricky','Katherine','Zach'];
+function canSeeGroupCalls(){return S.isAdmin||GROUP_CALL_STAFF.includes(S.user);}
+function canSeeGroupCallsOnCal(){return S.isAdmin||GROUP_CALL_CAL_STAFF.includes(S.user);}
 function roomForProducts(prods){
   const p=Array.isArray(prods)?prods:[];
   if(p.includes('PRODICTA'))return MEET_ROOMS.PRODICTA;
@@ -628,7 +659,7 @@ async function getCallResponse(stage,prospectSaid,product,callType,history){
 async function loadAll(){
   S.loading=true;r();
   try{
-    const [leads,notes,demos,reminders,upsells,busy,signups,bonuses]=await Promise.all([
+    const [leads,notes,demos,reminders,upsells,busy,signups,bonuses,groupCalls]=await Promise.all([
       dbGet('tracker_leads','order=created_at.asc'),
       dbGet('tracker_notes','order=created_at.asc'),
       dbGet('tracker_demos','order=created_at.asc'),
@@ -637,6 +668,9 @@ async function loadAll(){
       dbGet('tracker_busy_blocks','select=*&order=created_at.asc&limit=10000'),
       dbGet('tracker_signups','order=created_at.asc').catch(()=>[]),
       dbGet('tracker_bonuses','order=created_at.asc').catch(()=>[]),
+      // Not fetched at all for someone who may not see group calls, so there is nothing in
+      // memory for a stray render to leak.
+      canSeeGroupCallsOnCal()?dbGet('tracker_group_calls','order=scheduled_dt.asc').catch(()=>[]):Promise.resolve([]),
     ]);
     S.leads=(leads||[]).map(l=>({
       id:l.id,staff:l.staff,company:l.company||'',contactName:l.contact_name||'',
@@ -679,6 +713,10 @@ async function loadAll(){
       id:b.id,staff:b.staff,type:b.type||'',amount:b.amount||0,
       month:b.month||'',note:b.note||'',date:b.date||''
     }));
+    S.groupCalls=(groupCalls||[]).map(g=>({
+      id:g.id,dt:utcToLocal(g.scheduled_dt),agenda:g.agenda||'',
+      notes:g.notes||'',createdBy:g.created_by||''
+    })).sort((a,b)=>new Date(a.dt)-new Date(b.dt));
   }catch(e){console.error('Load error',e);}
   S.loading=false;
   maybeShowCheckin(); // covers logging in / opening the tracker inside a slot
@@ -701,6 +739,7 @@ let S={
   mProds:[],mErr:'',demoProdsSel:[],demoProdErr:'',upsellProds:[],upsellErr:'',
   upsellPrefillLeadId:null,upsellSelectedLeadId:null,
   expanded:{},noteInputs:{},demoNoteInputs:{},dismissedAlerts:{},
+  groupCalls:[],showGroupCallModal:false,editGroupCallId:null,groupCallErr:'',gcNoteInputs:{},
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
   leads:[],upsells:[],signups:[],bonuses:[],
   _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{},
@@ -1035,12 +1074,13 @@ function appHtml(){
         <button class="tab-btn ${S.tab==='upsells'?'active':''}" data-tab="upsells">Upsells <span style="font-size:11px;background:rgba(59,191,173,0.15);color:#3bbfad;border-radius:10px;padding:1px 7px;margin-left:4px">${mu.length}</span></button>
         ${(S.isAdmin||COMM_STAFF.includes(S.user))?`<button class="tab-btn ${S.tab==='commission'?'active':''}" data-tab="commission">💰 Commission</button>`:''}
         <button class="tab-btn ${S.tab==='calendar'?'active':''}" data-tab="calendar">📅 Calendar</button>
+        ${canSeeGroupCalls()?`<button class="tab-btn ${S.tab==='groupcalls'?'active':''}" data-tab="groupcalls">👥 Group Calls</button>`:''}
         <button class="tab-btn ${S.tab==='objections'?'active':''}" data-tab="objections">💬 Objections</button>
         <button class="tab-btn ${S.tab==='callscript'?'active':''}" data-tab="callscript">📞 Call Script</button>
         ${S.isAdmin?`<button class="tab-btn ${S.tab==='lb'?'active':''}" data-tab="lb">Leaderboard</button>`:''}
       </div>
 
-      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='objections'?objectionsTab():S.tab==='callscript'?callScriptTab():lbTab(sm,mx)}
+      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='groupcalls'?(canSeeGroupCalls()?groupCallsTab():alertsTab(alerts,ml)):S.tab==='objections'?objectionsTab():S.tab==='callscript'?callScriptTab():lbTab(sm,mx)}
     </div>
   </div>
   ${S.showModal?leadModal():''}
@@ -1048,6 +1088,7 @@ function appHtml(){
   ${S.showReminderModal?remModal():''}
   ${S.showUpsellModal?upsellModal():''}
   ${S.showBusyModal?busyModal():''}
+  ${S.showGroupCallModal&&canSeeGroupCalls()?groupCallModal():''}
   ${S.showSignupModal?signupModal():''}
   ${S.showLossModal?lossModal():''}
   ${S.showCheckinModal?checkinModal():''}
@@ -1480,6 +1521,15 @@ function calendarTab(){
       const chip=`${b.staff}: ${tlbl}${b.company?' · '+b.company:''}`;
       evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:chip,moreInfo:b.label,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
     });
+    // Group calls belong to the whole team rather than one diary, so they are not filtered by
+    // owner — the gate is who may see group calls at all, which excludes Kenny.
+    if(canSeeGroupCallsOnCal()){
+      (S.groupCalls||[]).forEach(g=>{
+        const gs=new Date(g.dt);
+        if(!sameLocalDay(gs,day))return;
+        evts.push({type:'groupcall',start:gs,durationMins:GROUP_CALL_MINS,label:`Group call${g.agenda?' · '+g.agenda:''}`,moreInfo:g.createdBy?`Scheduled by ${g.createdBy}`:'',team:[],id:g.id,meetLink:GROUP_CALL_ROOM,color:'#ffcd3c'});
+      });
+    }
     return evts;
   }
 
@@ -1535,6 +1585,7 @@ function calendarTab(){
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(116,185,255,0.18);border-left:3px solid #74b9ff"></div>Meeting</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(162,155,254,0.18);border-left:3px solid #a29bfe"></div>Networking</div>
         <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(255,118,117,0.15);border-left:3px solid #ff7675"></div>Busy</div>
+        ${canSeeGroupCallsOnCal()?`<div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(255,205,60,0.22);border-left:3px solid #ffcd3c"></div>Group call</div>`:''}
       </div>
     </div>
     <div style="overflow-x:auto">
@@ -1560,9 +1611,11 @@ function calendarTab(){
               const narrow=cols>1,tight=cols>2;
               const attrs=e.type==='demo'
                 ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
+                :e.type==='groupcall'
+                ?`onclick="event.stopPropagation();window.__openGroupCall('${e.id}')"`
                 :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
               const teamSuffix=(!narrow&&Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
-              const meetIcon=(e.type==='demo'&&e.meetLink&&!tight)?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join meeting — ${e.meetLink}" style="flex-shrink:0;margin-left:${narrow?2:4}px;padding:0 ${narrow?2:4}px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥${narrow?'':' Join'}</a>`:'';
+              const meetIcon=((e.type==='demo'||e.type==='groupcall')&&e.meetLink&&!tight)?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join meeting — ${e.meetLink}" style="flex-shrink:0;margin-left:${narrow?2:4}px;padding:0 ${narrow?2:4}px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥${narrow?'':' Join'}</a>`:'';
               const attCount=Array.isArray(e.attendees)?e.attendees.length:0;
               const attChip=(attCount&&!narrow)?` <span style="opacity:0.7;font-size:9px">· 👤${attCount}</span>`:'';
               const attTitle=attCount?`\nAttendees: ${e.attendees.map(a=>a.name||a.email).filter(Boolean).join(', ')}`:'';
@@ -1570,7 +1623,7 @@ function calendarTab(){
               if(e.moreInfo&&e.moreInfo!==e.subtype)titleParts.push(e.moreInfo);
               if(Array.isArray(e.team)&&e.team.length)titleParts.push(`with ${e.team.join(', ')}`);
               const titleAttr=titleParts.join(' — ')+attTitle;
-              return`<div class="cal-event ${e.type==='demo'?'demo':'busy-'+e.subtype} ${narrow?'cal-event-narrow':''}" style="${eventStyle(e,col,cols)}" title="${titleAttr}" ${attrs}>
+              return`<div class="cal-event ${e.type==='demo'?'demo':e.type==='groupcall'?'groupcall':'busy-'+e.subtype} ${narrow?'cal-event-narrow':''}" style="${eventStyle(e,col,cols)}" title="${titleAttr}" ${attrs}>
                 <span style="width:6px;height:6px;border-radius:50%;background:${e.color};margin:4px 3px 0 0;flex-shrink:0"></span><span class="cal-event-label">${e.label}${teamSuffix}${attChip}</span>${meetIcon}
               </div>`;
             }).join('')}
@@ -1634,6 +1687,68 @@ function busyModal(){
     </div>
   </div></div>`;}
 
+
+// ── GROUP CALLS ─────────────────────────────────────────────────────────────
+// One standing room for the whole team, so a group call carries no lead, no products and no
+// owner beyond whoever put it in the diary.
+function gcEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function groupCallsTab(){
+  const now=new Date();
+  const calls=S.groupCalls||[];
+  const upcoming=calls.filter(g=>new Date(g.dt)>=now).sort((a,b)=>new Date(a.dt)-new Date(b.dt));
+  const past=calls.filter(g=>new Date(g.dt)<now).sort((a,b)=>new Date(b.dt)-new Date(a.dt));
+
+  const card=(g,isPast)=>`<div class="gc-card ${isPast?'past':''}">
+    <div class="gc-top">
+      <div style="flex:1;min-width:200px">
+        <div class="gc-dt">${gcEsc(fmtInviteDate(g.dt))} · ${gcEsc(fmtInviteTime(g.dt))}</div>
+        ${g.agenda?`<div class="gc-agenda">${gcEsc(g.agenda)}</div>`:`<div class="gc-agenda" style="color:var(--text-muted)">No agenda set.</div>`}
+        <div class="gc-meta">Scheduled by ${gcEsc(g.createdBy||'unknown')}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+        ${isPast?'':`<button class="icon-btn" data-gcedit="${g.id}" title="Edit this group call">✏️</button>`}
+        <a class="gc-join" href="${GROUP_CALL_ROOM}" target="_blank" rel="noopener">🎥 Join Call</a>
+      </div>
+    </div>
+    ${g.notes?`<div class="gc-notes">${gcEsc(g.notes)}</div>`:''}
+    ${isPast?`<div class="gc-note-form">
+      <textarea data-gcni="${g.id}" placeholder="Add notes from this call…">${gcEsc(S.gcNoteInputs[g.id]||'')}</textarea>
+      <button data-gcnadd="${g.id}">Save note</button>
+    </div>`:''}
+  </div>`;
+
+  return`<div>
+    <div class="sec-hdr">
+      <span class="sec-title">Group calls</span>
+      <button class="action-btn" id="ogc">+ Schedule group call</button>
+    </div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Internal team calls for Jessie, Ricky and Katherine. They also show on the shared calendar for Zach.</div>
+
+    <div class="sec-hdr" style="margin-bottom:0.75rem"><span class="sec-title">Upcoming</span></div>
+    ${upcoming.length?upcoming.map(g=>card(g,false)).join(''):`<div class="gc-empty">No group calls scheduled.</div>`}
+
+    <div class="sec-hdr" style="margin:1.75rem 0 0.75rem"><span class="sec-title">Past calls</span></div>
+    ${past.length?past.map(g=>card(g,true)).join(''):`<div class="gc-empty">No past group calls yet.</div>`}
+  </div>`;}
+
+function groupCallModal(){
+  const pad=n=>String(n).padStart(2,'0');
+  const localDt=(offset=0)=>{const d=new Date(Date.now()+offset);return`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;};
+  const existing=S.editGroupCallId?(S.groupCalls||[]).find(g=>g.id===S.editGroupCallId):null;
+  const editing=!!existing;
+  return`<div class="modal-overlay"><div class="modal">
+    <h3>${editing?'Edit group call':'Schedule group call'}</h3>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">Everyone joins the same room: <span style="color:var(--teal)">${GROUP_CALL_ROOM}</span></div>
+    <div class="form-field"><label class="form-label">Date and time</label><input type="datetime-local" id="gcdt" value="${gcEsc(editing?existing.dt:localDt(3600000))}"/></div>
+    <div class="form-field"><label class="form-label">Agenda</label><textarea id="gcagenda" placeholder="What will be covered on this call?">${gcEsc(editing?existing.agenda:'')}</textarea></div>
+    ${S.groupCallErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${gcEsc(S.groupCallErr)}</p>`:''}
+    <div class="modal-actions">
+      <button class="btn-cancel" id="gccm">Cancel</button>
+      ${editing?`<button class="btn-cancel" id="gcdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      <button class="btn-save" id="gcsv">${editing?'Save changes':'Save'}</button>
+    </div>
+  </div></div>`;}
 
 function commissionTab(){
   const now=new Date();
@@ -2291,6 +2406,15 @@ window.__toggleDemoTeam=function(n){
   S.demoTeamSel=S.demoTeamSel.includes(n)?S.demoTeamSel.filter(x=>x!==n):[...S.demoTeamSel,n];
   r();
 };
+// Clicking a group call on the calendar. Zach can see the block and use its Join chip, but he
+// does not organise them, so for him the chip is not a way into the edit modal.
+window.__openGroupCall=function(id){
+  if(!canSeeGroupCalls())return;
+  const g=(S.groupCalls||[]).find(x=>x.id===id);
+  if(!g)return;
+  S.editGroupCallId=id;S.showGroupCallModal=true;S.groupCallErr='';
+  r();
+};
 window.__toggleBusyTeam=function(n){
   snapshotBusyForm();
   S.busyTeamSel=S.busyTeamSel.includes(n)?S.busyTeamSel.filter(x=>x!==n):[...S.busyTeamSel,n];
@@ -2788,6 +2912,44 @@ function bind(){
     await loadAll();
     r();
   };
+
+  // Group calls
+  const ogc=document.getElementById('ogc');
+  if(ogc)ogc.onclick=()=>{S.showGroupCallModal=true;S.editGroupCallId=null;S.groupCallErr='';r();};
+  document.querySelectorAll('[data-gcedit]').forEach(b=>b.onclick=()=>{
+    S.showGroupCallModal=true;S.editGroupCallId=b.dataset.gcedit;S.groupCallErr='';r();});
+  const gccm=document.getElementById('gccm');
+  if(gccm)gccm.onclick=()=>{S.showGroupCallModal=false;S.editGroupCallId=null;S.groupCallErr='';r();};
+  const gcdel=document.getElementById('gcdel');
+  if(gcdel)gcdel.onclick=async()=>{
+    if(!S.editGroupCallId)return;
+    await dbDelete('tracker_group_calls',S.editGroupCallId);
+    S.showGroupCallModal=false;S.editGroupCallId=null;S.groupCallErr='';await loadAll();
+  };
+  const gcsv=document.getElementById('gcsv');
+  if(gcsv)gcsv.onclick=async()=>{
+    const dt=document.getElementById('gcdt').value;
+    const agenda=document.getElementById('gcagenda').value.trim();
+    if(!dt){S.groupCallErr='Please set a date and time.';r();return;}
+    const payload={scheduled_dt:saveLocalDt(dt),agenda};
+    try{
+      if(S.editGroupCallId){await dbPatch('tracker_group_calls',S.editGroupCallId,payload);}
+      else{await dbPost('tracker_group_calls',{...payload,created_by:S.user||''});}
+    }catch(e){console.error('Group call save failed',e);S.groupCallErr='Could not save — check connection.';r();return;}
+    S.showGroupCallModal=false;S.editGroupCallId=null;S.groupCallErr='';
+    await loadAll();
+  };
+  document.querySelectorAll('[data-gcni]').forEach(ta=>ta.oninput=()=>{S.gcNoteInputs[ta.dataset.gcni]=ta.value;});
+  document.querySelectorAll('[data-gcnadd]').forEach(btn=>btn.onclick=async()=>{
+    const id=btn.dataset.gcnadd;
+    const txt=(S.gcNoteInputs[id]||'').trim();if(!txt)return;
+    const g=(S.groupCalls||[]).find(x=>x.id===id);if(!g)return;
+    // Appended, not overwritten — three people share one notes column and none of them should
+    // be able to wipe another's write-up by saving after them.
+    const stamp=`${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})} · ${S.user}`;
+    const newNotes=`${g.notes?g.notes+'\n\n':''}[${stamp}] ${txt}`;
+    await dbPatch('tracker_group_calls',id,{notes:newNotes});
+    S.gcNoteInputs[id]='';await loadAll();});
 
   // Upsells
   document.querySelectorAll('[data-uf]').forEach(f=>f.onclick=()=>{S.upsellFilter=f.dataset.uf;r();});
