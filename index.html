@@ -2178,10 +2178,7 @@ const OBJECTIONS={
       {q:"We deal with a lot of candidates at once, how can it help?",a:"When you have a high volume of applicants, the screening bottleneck costs you time and risks good candidates slipping through. For high volume roles, Rapid Screen gives every candidate a 5-8 minute real-work test at just £6 per assessment with no subscription. You get a ranked list in minutes. Use Rapid Screen to screen the full pool, then PRODICTA on your final shortlist for deeper insight before interview. Bulk Invite and Auto-Shortlist mean you manage the whole process from one dashboard."},
       {q:"How does this work for low to mid-level roles?",a:"PRODICTA is built for every level. Speed-Fit takes 15 minutes and is designed for operational roles. For roles where even 15 minutes feels like too much, Rapid Screen delivers a real-work test in 5-8 minutes at £6 per assessment. No subscription needed. It is specifically built for entry-level and volume hiring where you need speed without sacrificing the ability to identify who can actually do the job."}
     ]
-  },
-  AIAURA:{Agency:[],Employer:[]},
-  Linka:{Agency:[],Employer:[]},
-  Firelynx:{Agency:[],Employer:[]}
+  }
 };
 
 function objectionsTab(){
@@ -2196,7 +2193,7 @@ function objectionsTab(){
 
     <!-- Product selector -->
     <div class="filter-pills" style="margin-bottom:12px">
-      ${['PRODICTA','AIAURA','Linka','Firelynx'].map(p=>`<button class="pill ${prod===p?'active':''}" data-objprod="${p}">${p}</button>`).join('')}
+      ${['PRODICTA'].map(p=>`<button class="pill ${prod===p?'active':''}" data-objprod="${p}">${p}</button>`).join('')}
     </div>
 
     <!-- Agency / Employer toggle -->
@@ -2240,9 +2237,6 @@ function callScriptTab(){
       <div style="font-size:13px;font-weight:500;color:#fff;margin-bottom:1.25rem">Set up your call</div>
       <div class="form-field"><label class="form-label">Product</label><select id="callprod">
         <option ${callProd==='PRODICTA'?'selected':''}>PRODICTA</option>
-        <option ${callProd==='AIAURA'?'selected':''}>AIAURA</option>
-        <option ${callProd==='Linka'?'selected':''}>Linka</option>
-        <option ${callProd==='Firelynx'?'selected':''}>Firelynx</option>
       </select></div>
       <div class="form-field"><label class="form-label">Call type</label>
         <div style="display:flex;gap:8px">
