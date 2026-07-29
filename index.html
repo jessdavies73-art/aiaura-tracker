@@ -2954,8 +2954,9 @@ function bind(){
 
   // Group calls
   const ogc=document.getElementById('ogc');
-  // A new call starts with all three ticked; unticking is the exception, not the setup step.
-  if(ogc)ogc.onclick=()=>{S.showGroupCallModal=true;S.editGroupCallId=null;S.groupCallErr='';S.gcAttendeesSel=GROUP_CALL_MEMBERS.slice();S.gcFormSnap=null;r();};
+  // A new call starts with nobody ticked, so the attendee list is always a deliberate choice
+  // rather than a default someone forgot to correct.
+  if(ogc)ogc.onclick=()=>{S.showGroupCallModal=true;S.editGroupCallId=null;S.groupCallErr='';S.gcAttendeesSel=[];S.gcFormSnap=null;r();};
   document.querySelectorAll('[data-gcedit]').forEach(b=>b.onclick=()=>{
     const g=(S.groupCalls||[]).find(x=>x.id===b.dataset.gcedit);
     S.showGroupCallModal=true;S.editGroupCallId=b.dataset.gcedit;S.groupCallErr='';
