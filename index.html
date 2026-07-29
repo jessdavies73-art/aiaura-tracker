@@ -1546,27 +1546,45 @@ function calendarTab(){
     return evts;
   }
 
-  // Split a cell's events into clusters that overlap in time. Each cluster gets
-  // an equal share of the cell width; events that clash with nothing stay full width.
-  function layoutCell(evts){
+  // Split a day's events into clusters that overlap in time. Each cluster gets an equal
+  // share of the cell width; events that clash with nothing stay full width.
+  //
+  // This runs across the whole day rather than one hour cell at a time. An event is drawn
+  // inside the cell of the hour it starts in but is free to spill past the bottom of it, so
+  // a block running 09:30–11:00 genuinely clashes with a 10:00 one even though the two sit
+  // in different cells. Clustering per cell could not see that pair, and since the later
+  // cell renders later in the DOM at the same z-index it simply painted over the spill —
+  // which is how a long group call ended up hidden behind, and unclickable under, the next
+  // hour's demo. Demos, busy blocks and group calls all arrive here from eventsForDay, so
+  // all three take part in the same clustering and the same side-by-side columns.
+  function layoutDay(evts){
     const items=evts.map(e=>{
       const start=e.start.getTime();
       // Guard zero/negative durations so same-instant events still count as overlapping.
       return{evt:e,start,end:start+Math.max(e.durationMins,1)*60000};
     }).sort((a,b)=>a.start-b.start||a.end-b.end);
-    const placed=[];
-    let cluster=[],clusterEnd=-Infinity;
+    const layout=new Map();
+    let cluster=[],colEnds=[];
     const flush=()=>{
-      cluster.forEach((it,i)=>placed.push({evt:it.evt,col:i,cols:cluster.length}));
-      cluster=[];clusterEnd=-Infinity;
+      const cols=colEnds.length;
+      cluster.forEach(it=>layout.set(it.evt,{col:it.col,cols}));
+      cluster=[];colEnds=[];
     };
     items.forEach(it=>{
-      if(cluster.length&&it.start>=clusterEnd)flush();
+      // A moment where nothing at all is running ends the cluster; what follows starts fresh
+      // at full width rather than inheriting the columns of an earlier pile-up.
+      if(colEnds.length&&it.start>=Math.max(...colEnds))flush();
+      // Reuse the first column that has already finished, so a long chain of overlaps does
+      // not keep slicing the cell thinner — the width is set by how many events actually run
+      // at once, not by how many are in the chain.
+      let col=colEnds.findIndex(end=>end<=it.start);
+      if(col===-1){col=colEnds.length;colEnds.push(it.end);}
+      else colEnds[col]=it.end;
+      it.col=col;
       cluster.push(it);
-      clusterEnd=Math.max(clusterEnd,it.end);
     });
     flush();
-    return placed;
+    return layout;
   }
 
   function eventStyle(evt,col=0,cols=1){
@@ -1578,6 +1596,10 @@ function calendarTab(){
     const track=`(100% - ${INSET+GAP*(cols-1)}px) / ${cols}`;
     return`top:${top}px;height:${height}px;left:calc(2px + (${track}) * ${col} + ${GAP*col}px);width:calc(${track});right:auto;`;
   }
+
+  // One pass per day, not one per hour cell: the columns an event gets depend on the whole
+  // day's clashes, so the layout has to be settled before any cell is drawn.
+  const dayViews=days.map(d=>{const evts=eventsForDay(d);return{evts,layout:layoutDay(evts)};});
 
   const weekLabel=`${days[0].toLocaleDateString('en-GB',{day:'numeric',month:'short'})} – ${days[6].toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}`;
 
@@ -1615,9 +1637,14 @@ function calendarTab(){
         <div class="cal-time-slot">${h}:00</div>
         ${days.map((d,di)=>{
           const isT=d.toDateString()===today.toDateString();
-          const evts=eventsForDay(d).filter(e=>e.start.getHours()===h);
+          const{evts:dayEvts,layout}=dayViews[di];
+          // A cell draws the events that start in its hour, positioned with the columns the
+          // day-wide layout handed them.
+          const cellEvts=dayEvts.filter(e=>e.start.getHours()===h)
+            .map(e=>({evt:e,...(layout.get(e)||{col:0,cols:1})}))
+            .sort((a,b)=>a.evt.start-b.evt.start||a.col-b.col);
           return`<div class="cal-cell ${isT?'today-col':''}">
-            ${layoutCell(evts).map(({evt:e,col,cols})=>{
+            ${cellEvts.map(({evt:e,col,cols})=>{
               // Side-by-side columns are tight, so decoration collapses into the tooltip.
               // At 3+ columns even the Join chip is dropped so the label keeps the space —
               // it stays reachable via the tooltip and the "Join Demo Room" button in the edit modal.
