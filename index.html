@@ -297,6 +297,26 @@
   .wa-prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: rgba(37,211,102,0.06); border: 1px solid rgba(37,211,102,0.22); border-radius: 8px; padding: 8px 10px; }
   .wa-prompt-q { font-size: 11px; color: var(--text-secondary); }
 
+  /* LEAD SEARCH */
+  .lead-search { position: relative; max-width: 420px; margin-bottom: 1rem; }
+  .lead-search input { width: 100%; padding: 8px 32px 8px 30px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,0.04); color: var(--text-primary); font-family: var(--font); font-size: 13px; }
+  .lead-search input:focus { outline: none; border-color: rgba(59,191,173,0.5); background: rgba(255,255,255,0.06); }
+  .lead-search input::placeholder { color: var(--text-muted); }
+  .ls-icon { position: absolute; left: 10px; top: 16px; transform: translateY(-50%); font-size: 12px; opacity: 0.5; pointer-events: none; }
+  .ls-clear { position: absolute; right: 5px; top: 16px; transform: translateY(-50%); border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 3px 7px; border-radius: 4px; font-family: var(--font); }
+  .ls-clear:hover { color: var(--text-primary); background: rgba(255,255,255,0.08); }
+  .ls-count { font-size: 11px; color: var(--text-muted); margin-top: 5px; }
+
+  /* DEMOS BOOKED TOTALS (admin) */
+  .demo-totals { display: flex; flex-direction: column; gap: 7px; margin-bottom: 1rem; background: rgba(250,199,117,0.05); border: 1px solid rgba(250,199,117,0.2); border-radius: 8px; padding: 10px 12px; }
+  .dt-title { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .dt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .dt-week { font-size: 10px; font-weight: 600; color: #fac775; text-transform: uppercase; letter-spacing: 0.08em; min-width: 66px; }
+  .dt-pill { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: rgba(250,199,117,0.12); border: 1px solid rgba(250,199,117,0.3); color: var(--text-secondary); white-space: nowrap; }
+  .dt-pill strong { color: #fac775; font-weight: 600; }
+  .dt-pill.dt-zero { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.1); color: var(--text-muted); }
+  .dt-pill.dt-zero strong { color: var(--text-muted); }
+
   .pipeline-step { display:flex; align-items:center; gap:7px; width:100%; padding:5px 10px; border-radius:6px; border:1px solid; font-size:12px; font-family:var(--font); cursor:pointer; background:none; text-align:left; transition:all 0.15s; }
   .pipeline-step:hover { background:rgba(255,255,255,0.06) !important; color:rgba(255,255,255,0.7) !important; border-color:rgba(255,255,255,0.25) !important; }
   .pipe-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
@@ -802,6 +822,9 @@ let S={
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
   // Which demo's "did you send the WhatsApp?" prompt is open, keyed demoId-leadId. One at a time.
   waPrompt:null,
+  // Leads log search. Every keystroke re-renders, so the caret position is parked here and put
+  // back in bind() — r() replaces the whole tree and the focused input goes with it.
+  leadQuery:'',_searchCaret:null,
   leads:[],upsells:[],signups:[],bonuses:[],
   _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{},objRoleType:'',
   callType:'Agency',callProd:'PRODICTA',inCall:false,callMessages:[],callLoading:false,callProspectInput:'',
@@ -850,6 +873,60 @@ function rosterForView(){return S.isAdmin?staffVisibleTo():visibleOwners(S.user)
 function myLeads(){return S.isAdmin?S.leads:S.leads.filter(l=>visibleOwners(S.user).includes(l.staff));}
 // Upsells stay private to their owner: each staff member only sees their own upsells.
 function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>u.staff===S.user);}
+
+// Free-text lead search. Terms are ANDed across one haystack rather than matched per field, so
+// "acme sam" finds the Acme lead whose contact is Sam even though no single field holds both.
+// Phone is deliberately out: it is owner-only on the card and searching it would leak whether a
+// number exists on someone else's lead.
+// The search term is echoed back into a value="" attribute, so a typed quote would otherwise
+// close it and spill the rest of the term into the markup.
+function escAttr(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function leadMatches(l,q){
+  const terms=String(q||'').toLowerCase().split(/\s+/).filter(Boolean);
+  if(!terms.length)return true;
+  const hay=[l.company,l.contactName,l.contactEmail,...(l.notes||[]).map(n=>n.txt)]
+    .filter(Boolean).join(' ').toLowerCase();
+  return terms.every(t=>hay.includes(t));
+}
+
+// Monday 00:00 of the week containing `from`, shifted by whole weeks. Sunday belongs to the week
+// that is ending rather than the one starting, which is the rule the calendar grid draws by.
+function mondayOf(from,weeksAhead){
+  const m=new Date(from);
+  m.setHours(0,0,0,0);
+  const dow=m.getDay();
+  m.setDate(m.getDate()+(dow===0?-6:1-dow)+(weeksAhead||0)*7);
+  return m;
+}
+// Upcoming demos per staff member starting inside [start,end). Status is checked rather than the
+// date alone, so a cancelled or already-completed demo never counts even if it sits in the week.
+function demoWeekCounts(leads,names,start,end){
+  return names.map(name=>({name,count:(leads||[]).reduce((a,l)=>l.staff!==name?a:a+(l.demos||[]).filter(d=>{
+    if(d.status!=='upcoming')return false;
+    const t=new Date(d.dt);
+    return !isNaN(t)&&t>=start&&t<end;
+  }).length,0)}));
+}
+// Admin-only bar, shown on both the leads log and the calendar. Split by week rather than given
+// as one running total: a rep with four demos all in a fortnight's time has an empty week now,
+// and a single number hides that until it is too late to fix.
+// Counts come off S.leads, not the filtered view, so the search box and the staff pills cannot
+// quietly change the totals.
+function demoTotalsBar(){
+  if(!S.isAdmin)return'';
+  const names=rosterForView();
+  if(!names.length)return'';
+  const now=new Date();
+  const w0=mondayOf(now,0),w1=mondayOf(now,1),w2=mondayOf(now,2);
+  const rows=[['This week',demoWeekCounts(S.leads,names,w0,w1)],['Next week',demoWeekCounts(S.leads,names,w1,w2)]];
+  return`<div class="demo-totals">
+    <div class="dt-title">Upcoming demos booked</div>
+    ${rows.map(([label,counts])=>`<div class="dt-row">
+      <span class="dt-week">${label}:</span>
+      ${counts.map(c=>`<span class="dt-pill ${c.count?'':'dt-zero'}">${c.name} <strong>${c.count}</strong></span>`).join('')}
+    </div>`).join('')}
+  </div>`;
+}
 function summ(){
   return rosterForView().map(n=>{
     const ls=S.leads.filter(l=>l.staff===n);
@@ -1102,7 +1179,10 @@ function appHtml(){
   const totalComm=mu.reduce((a,u)=>a+u.commission,0);
   const upDemos=ml.reduce((a,l)=>a+(l.demos||[]).filter(d=>d.status==='upcoming').length,0);
   const pendRems=ml.reduce((a,l)=>a+(l.reminders||[]).filter(r=>!r.done).length,0);
-  const vis=((S.isAdmin||ALL_STAFF.includes(S.user))&&S.filter!=='All')?ml.filter(l=>l.staff===S.filter):ml;
+  // Staff pill first, then the search box, so the two compose: filtering to Ricky and typing
+  // "acme" gives Ricky's Acme leads rather than one overriding the other.
+  const staffVis=((S.isAdmin||ALL_STAFF.includes(S.user))&&S.filter!=='All')?ml.filter(l=>l.staff===S.filter):ml;
+  const vis=staffVis.filter(l=>leadMatches(l,S.leadQuery));
   const visU=(S.isAdmin&&S.upsellFilter!=='All')?S.upsells.filter(u=>u.staff===S.upsellFilter):mu;
   const sm=summ();const mx=Math.max(...sm.map(x=>x.leads),1);
 
@@ -1141,7 +1221,7 @@ function appHtml(){
         ${S.isAdmin?`<button class="tab-btn ${S.tab==='lb'?'active':''}" data-tab="lb">Leaderboard</button>`:''}
       </div>
 
-      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='groupcalls'?(canSeeGroupCalls()?groupCallsTab():alertsTab(alerts,ml)):S.tab==='objections'?objectionsTab():S.tab==='callscript'?callScriptTab():lbTab(sm,mx)}
+      ${S.tab==='alerts'?alertsTab(alerts,ml):S.tab==='leads'?leadsTab(vis,staffVis.length):S.tab==='upsells'?upsellsTab(visU):S.tab==='commission'?commissionTab():S.tab==='calendar'?calendarTab():S.tab==='groupcalls'?(canSeeGroupCalls()?groupCallsTab():alertsTab(alerts,ml)):S.tab==='objections'?objectionsTab():S.tab==='callscript'?callScriptTab():lbTab(sm,mx)}
     </div>
   </div>
   ${S.showModal?leadModal():''}
@@ -1320,11 +1400,21 @@ function alertsTab(alerts,ml){
 
   </div>`;}
 
-function leadsTab(vis){
+function leadsTab(vis,staffTotal){
+  const q=S.leadQuery||'';
   return`<div>
     <div class="sec-hdr"><span class="sec-title">Leads log</span><div style="display:flex;gap:8px">${S.isAdmin?`<button class="action-btn" id="exportcsv" style="background:rgba(59,191,173,0.1);border-color:rgba(59,191,173,0.3)">↓ Export CSV</button>`:''}<button class="action-btn" id="om">+ Add lead</button></div></div>
+    ${demoTotalsBar()}
     ${(S.isAdmin||ALL_STAFF.includes(S.user))?`<div class="filter-pills">${['All',...rosterForView()].map(n=>`<button class="pill ${S.filter===n?'active':''}" data-f="${n}">${n}</button>`).join('')}</div>`:''}
-    ${vis.length===0?`<div class="empty-state"><div class="icon">📋</div><p>No leads yet — add your first one above.</p></div>`:`
+    <div class="lead-search">
+      <span class="ls-icon">🔍</span>
+      <input type="text" id="leadsearch" autocomplete="off" spellcheck="false" placeholder="Search company, contact, email or notes…" value="${escAttr(q)}"/>
+      ${q?`<button class="ls-clear" id="leadsearchclear" title="Clear search">×</button>`:''}
+      ${q?`<div class="ls-count">${vis.length} of ${staffTotal} lead${staffTotal===1?'':'s'} match “${escAttr(q)}”</div>`:''}
+    </div>
+    ${vis.length===0?(q
+      ?`<div class="empty-state"><div class="icon">🔍</div><p>No leads match “${escAttr(q)}”.</p></div>`
+      :`<div class="empty-state"><div class="icon">📋</div><p>No leads yet — add your first one above.</p></div>`):`
     <div class="table-wrap"><table>
       <thead><tr>
         ${S.isAdmin?'<th>Staff</th>':''}
@@ -1545,10 +1635,8 @@ function calendarTab(){
   const STAFF_COLORS={Ricky:'#3bbfad',Katherine:'#a29bfe',Zach:'#e17055',Jessie:'#74b9ff',Kenny:'#55efc4'};
   const HOURS=Array.from({length:14},(_,i)=>i+7); // 7am–8pm
   const today=new Date();today.setHours(0,0,0,0);
-  const weekStart=new Date(today);
-  const dayOfWeek=weekStart.getDay();
-  const mondayOffset=dayOfWeek===0?-6:1-dayOfWeek;
-  weekStart.setDate(weekStart.getDate()+mondayOffset+S.calWeekOffset*7);
+  // Same Monday rule the demo totals bar counts by, shared so the two can never drift apart.
+  const weekStart=mondayOf(today,S.calWeekOffset);
   const days=Array.from({length:7},(_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return d;});
   const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 
@@ -1673,6 +1761,7 @@ function calendarTab(){
       </div>
       <button class="action-btn" id="obusy">+ Block time</button>
     </div>
+    ${demoTotalsBar()}
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:1rem">
       ${Object.entries(STAFF_COLORS).filter(([name])=>visibleToMe(name)).map(([name,col])=>`<div class="cal-staff-row"><div class="staff-dot" style="background:${col}"></div>${name}</div>`).join('')}
       <div class="cal-legend">
@@ -2735,6 +2824,21 @@ function bind(){
   document.querySelectorAll('[data-del]').forEach(d=>d.onclick=async()=>{await dbDelete('tracker_leads',d.dataset.del);await loadAll();});
   document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const l=S.leads.find(x=>x.id===b.dataset.edit);if(!l)return;S.showModal=true;S.editId=l.id;S.mProds=[...l.products];S.mErr='';r();});
   document.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>{const id=b.dataset.exp;S.expanded[id]=!S.expanded[id];r();});
+  // Filtering has to re-render, and r() throws the focused input away with the rest of the tree.
+  // The caret offset is carried across in S._searchCaret and reapplied here, otherwise typing a
+  // second character is impossible: focus is gone after the first.
+  const lsq=document.getElementById('leadsearch');
+  if(lsq){
+    lsq.oninput=()=>{S.leadQuery=lsq.value;S._searchCaret=lsq.selectionStart;r();};
+    if(S._searchCaret!==null){
+      const pos=Math.min(S._searchCaret,lsq.value.length);
+      S._searchCaret=null;
+      lsq.focus();
+      try{lsq.setSelectionRange(pos,pos);}catch(e){}
+    }
+  }
+  const lsc=document.getElementById('leadsearchclear');
+  if(lsc)lsc.onclick=()=>{S.leadQuery='';S._searchCaret=0;r();};
   document.querySelectorAll('[data-ni]').forEach(ta=>ta.oninput=()=>{S.noteInputs[ta.dataset.ni]=ta.value;});
   document.querySelectorAll('[data-dni]').forEach(ta=>ta.oninput=()=>{S.demoNoteInputs[ta.dataset.dni]=ta.value;});
   document.querySelectorAll('[data-nadd]').forEach(btn=>btn.onclick=async()=>{
