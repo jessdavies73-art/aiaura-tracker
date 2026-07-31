@@ -438,6 +438,14 @@ const GROUP_CALL_MEMBERS=['Jessie','Ricky','Katherine'];
 const GROUP_CALL_CAL_STAFF=['Ricky','Katherine','Zach'];
 function canSeeGroupCalls(){return S.isAdmin||GROUP_CALL_STAFF.includes(S.user);}
 function canSeeGroupCallsOnCal(){return S.isAdmin||GROUP_CALL_CAL_STAFF.includes(S.user);}
+// Deleting anything — a lead, an upsell, a busy block, a group call, a sign-up — is Jessie's
+// alone. Staff still create and edit their own records; they just never destroy one. Every
+// destructive control is hidden behind this and its handler re-checks it, so a stale button
+// left in the DOM by a race still cannot fire the delete.
+function canDelete(){return S.isAdmin;}
+// Cancelling a demo wipes it from the shared calendar for everyone, so it is a delete in all
+// but name. Rescheduling stays open to the demo's owner.
+function canCancelDemo(){return S.isAdmin;}
 function roomForProducts(prods){
   const p=Array.isArray(prods)?prods:[];
   if(p.includes('PRODICTA'))return MEET_ROOMS.PRODICTA;
@@ -1175,7 +1183,7 @@ function quickView(type,ml,mu){
         <div class="qv-detail" style="color:#74b9ff;font-weight:500">${fmtDt(r.dt)}</div>
         <div class="qv-meta">${r.txt}${S.isAdmin?' · '+l.staff:''}</div>
       </div>
-      <div class="qv-right"><button class="rem-done-btn" data-markdone="${r.id}" data-lid="${l.id}">Done</button></div>
+      <div class="qv-right">${(S.isAdmin||l.staff===S.user)?`<button class="rem-done-btn" data-markdone="${r.id}" data-lid="${l.id}">Done</button>`:''}</div>
     </div>`).join('');
   }
 
@@ -1439,7 +1447,8 @@ function leadsTab(vis,staffTotal){
       <tbody>
       ${vis.slice().reverse().map(l=>{
         const exp=S.expanded[l.id];
-        // Own the lead (or admin) → full contact + account + edit/delete. Other staff → company/name/email only.
+        // Own the lead (or admin) → full contact + account + edit. Other staff → company/name/email only.
+        // Delete is not part of "own": only Jessie ever sees it (canDelete).
         const own=S.isAdmin||l.staff===S.user;
         const upD=(l.demos||[]).find(d=>d.status==='upcoming');
         const pR=(l.reminders||[]).filter(r=>!r.done).length;
@@ -1525,7 +1534,7 @@ function leadsTab(vis,staffTotal){
                     <button class="demo-action-btn done-btn" data-demodone="${d.id}" data-lid="${l.id}">✓ Mark done</button>
                     <button class="demo-action-btn reschedule-btn" data-resch="${d.id}" data-lid="${l.id}">↺ Reschedule</button>
                     ${hasInviteEmails?`<button class="demo-action-btn" style="border-color:rgba(116,185,255,0.4);color:#74b9ff;background:rgba(116,185,255,0.08)" data-sendinvite="${d.id}" data-lid="${l.id}">✉ Send invite</button>`:''}
-                    <button class="demo-action-btn cancel-btn" data-canceldemo="${d.id}" data-lid="${l.id}">✕ Cancel</button>
+                    ${canCancelDemo()?`<button class="demo-action-btn cancel-btn" data-canceldemo="${d.id}" data-lid="${l.id}">✕ Cancel</button>`:''}
                   </div>`;})():''}
                 </div>`).join('')}
               </div>`:''}
@@ -1538,7 +1547,7 @@ function leadsTab(vis,staffTotal){
                 <div class="activity-label">Reminders</div>
                 ${(l.reminders||[]).map(rem=>`<div class="rem-card ${rem.done?'done-rem':''}">
                   <div style="flex:1"><div class="rem-dt">🔔 ${fmtDt(rem.dt)}</div><div class="rem-txt">${rem.txt}</div></div>
-                  ${!rem.done?`<button class="rem-done-btn" data-markdone="${rem.id}" data-lid="${l.id}">Done</button>`:`<span style="font-size:11px;color:rgba(59,191,173,0.5)">✓</span>`}
+                  ${!rem.done?(own?`<button class="rem-done-btn" data-markdone="${rem.id}" data-lid="${l.id}">Done</button>`:''):`<span style="font-size:11px;color:rgba(59,191,173,0.5)">✓</span>`}
                 </div>`).join('')}
               </div>`:''}
               <div class="activity-section">
@@ -1555,7 +1564,7 @@ function leadsTab(vis,staffTotal){
           <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${l.date}</td>
           <td style="white-space:nowrap">
             ${own?`<button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>`:''}
-            ${own?`<button class="icon-btn danger" data-del="${l.id}" title="Delete">×</button>`:''}
+            ${canDelete()?`<button class="icon-btn danger" data-del="${l.id}" title="Delete">×</button>`:''}
           </td>
         </tr>`;
       }).join('')}
@@ -1592,7 +1601,7 @@ function upsellsTab(visU){
         <td style="color:var(--teal);font-weight:600;white-space:nowrap">${u.commission?'£'+u.commission:'—'}</td>
         <td style="font-size:12px;color:var(--text-secondary);max-width:200px">${u.notes||'—'}</td>
         <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${u.date}</td>
-        <td><button class="icon-btn danger" data-delu="${u.id}">×</button></td>
+        <td>${canDelete()?`<button class="icon-btn danger" data-delu="${u.id}">×</button>`:''}</td>
       </tr>`).join('')}
       </tbody>
     </table></div>`}
@@ -1868,7 +1877,7 @@ function busyModal(){
   }).join('');
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit busy block':'Block out time'}</h3>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?'Update or delete this busy block.':'Add a busy block — visible to everyone on the shared calendar.'}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?(canDelete()?'Update or delete this busy block.':'Update this busy block.'):'Add a busy block — visible to everyone on the shared calendar.'}</div>
     ${S.isAdmin
       ?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${STAFF_OPTS.map(n=>`<option value="${n}"${n===staffVal?' selected':''}>${n}</option>`).join('')}</select></div>`
       :`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`}
@@ -1886,7 +1895,7 @@ function busyModal(){
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
-      ${editing?`<button class="btn-cancel" id="bdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      ${editing&&canDelete()?`<button class="btn-cancel" id="bdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
       <button class="btn-save" id="bsv">${editing?'Save changes':'Save block'}</button>
     </div>
   </div></div>`;}
@@ -1987,7 +1996,7 @@ function groupCallModal(){
     ${S.groupCallErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${gcEsc(S.groupCallErr)}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="gccm">Cancel</button>
-      ${editing?`<button class="btn-cancel" id="gcdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      ${editing&&canDelete()?`<button class="btn-cancel" id="gcdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
       <button class="btn-save" id="gcsv">${editing?'Save changes':'Save'}</button>
     </div>
   </div></div>`;}
@@ -2098,7 +2107,7 @@ function commissionTab(){
                       <td style="text-align:right;color:var(--text-secondary)">£${usage.toFixed(2)}</td>
                       <td style="text-align:right;color:var(--text-muted)">${rate}%</td>
                       <td style="text-align:right;color:#3bbfad;font-weight:600">£${sg.signupBonus.toFixed(2)}</td>
-                      <td style="text-align:right"><button class="icon-btn danger" style="font-size:10px;padding:2px 6px" data-delsg="${sg.id}">×</button></td>
+                      <td style="text-align:right">${canDelete()?`<button class="icon-btn danger" style="font-size:10px;padding:2px 6px" data-delsg="${sg.id}">×</button>`:''}</td>
                     </tr>`;
                   }).join('')}
                 </tbody>
@@ -2159,7 +2168,7 @@ function commissionTab(){
               ${S.isAdmin&&!isCancelled?`<button class="demo-action-btn" style="font-size:10px;margin-top:6px;border-color:rgba(255,118,117,0.4);color:#ff7675" data-cancelclient="${sg.id}">Mark cancelled</button>`:''}`}
             </td>
             <td style="color:var(--text-muted);font-size:12px">${sg.date}</td>
-            <td><button class="icon-btn danger" data-delsg="${sg.id}">×</button></td>
+            <td>${canDelete()?`<button class="icon-btn danger" data-delsg="${sg.id}">×</button>`:''}</td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -2634,7 +2643,7 @@ function demoModal(){
     <div class="form-field"><label class="form-label">Brief / agenda note</label><textarea id="dnote" placeholder="e.g. Initial walkthrough — client wants to see scoring reports and dashboard">${escAttr(noteValue)}</textarea></div>
     <div class="modal-actions">
       <button class="btn-cancel" id="dcm">Cancel</button>
-      ${editing?`<button class="btn-cancel" id="ddel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      ${editing&&canCancelDemo()?`<button class="btn-cancel" id="ddel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
       <button class="btn-save" id="dsv">${saveLabel}</button>
     </div>
   </div></div>`;}
@@ -2836,7 +2845,7 @@ function bind(){
   document.querySelectorAll('[data-qvclose]').forEach(b=>b.onclick=()=>{S.qv=null;r();});
   document.querySelectorAll('[data-tab]').forEach(t=>t.onclick=()=>{S.tab=t.dataset.tab;r();});
   document.querySelectorAll('[data-f]').forEach(f=>f.onclick=()=>{S.filter=f.dataset.f;r();});
-  document.querySelectorAll('[data-del]').forEach(d=>d.onclick=async()=>{await dbDelete('tracker_leads',d.dataset.del);await loadAll();});
+  document.querySelectorAll('[data-del]').forEach(d=>d.onclick=async()=>{if(!canDelete())return;await dbDelete('tracker_leads',d.dataset.del);await loadAll();});
   document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const l=S.leads.find(x=>x.id===b.dataset.edit);if(!l)return;S.showModal=true;S.editId=l.id;S.mProds=[...l.products];S.mErr='';r();});
   document.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>{const id=b.dataset.exp;S.expanded[id]=!S.expanded[id];r();});
   // Filtering has to re-render, and r() throws the focused input away with the rest of the tree.
@@ -2875,6 +2884,7 @@ function bind(){
   const dcm=document.getElementById('dcm');if(dcm)dcm.onclick=()=>{S.showDemoModal=false;S.rescheduleId=null;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=[];S.demoFormSnap=null;S.demoMeetLink=undefined;S.demoAttendees=[];r();};
   const ddel=document.getElementById('ddel');
   if(ddel)ddel.onclick=async()=>{
+    if(!canCancelDemo())return;
     if(!S.editDemoId)return;
     const l=S.leads.find(x=>x.id===S.demoLeadId);
     await dbPatch('tracker_demos',S.editDemoId,{status:'cancelled'});
@@ -2968,6 +2978,7 @@ function bind(){
     const d=l&&l.demos.find(x=>x.id===b.dataset.resch);
     S.reschOldDt=d?d.dt:'';S.showDemoModal=true;S.demoLeadId=b.dataset.lid;S.rescheduleId=b.dataset.resch;S.editDemoId=null;S.editDemoLeadId=null;S.demoTeamSel=d?[...(d.demoTeam||[])]:[];S.demoFormSnap=null;S.demoMeetLink=d?(d.meetLink||''):undefined;S.demoAttendees=d&&Array.isArray(d.attendees)?d.attendees.map(a=>({name:a.name||'',email:a.email||''})):[];r();});
   document.querySelectorAll('[data-canceldemo]').forEach(b=>b.onclick=async()=>{
+    if(!canCancelDemo())return;
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     if(l){await dbPatch('tracker_demos',b.dataset.canceldemo,{status:'cancelled'});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:'Demo cancelled.'});}
     await loadAll();});
@@ -2994,6 +3005,9 @@ function bind(){
     await loadAll();});
   document.querySelectorAll('[data-markdone]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
+    // A reminder is the lead owner's to clear. Staff see each other's leads, so without this
+    // check the leads-log Done button would tick off someone else's call-back.
+    if(l&&!(S.isAdmin||l.staff===S.user))return;
     if(l){const rem=l.reminders.find(x=>x.id===b.dataset.markdone);if(rem){await dbPatch('tracker_reminders',rem.id,{done:true});await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Reminder done: ${rem.txt}`});}}
     await loadAll();});
   document.querySelectorAll('[data-dismiss]').forEach(b=>b.onclick=()=>{S.dismissedAlerts[b.dataset.dismiss]=true;r();});
@@ -3164,6 +3178,7 @@ function bind(){
     S._signupAddons=[];S._signupCustomPrice='';S._linkaUsage='';
     S._linkaClientName=clientName;r();});
   document.querySelectorAll('[data-cancelclient]').forEach(b=>b.onclick=async()=>{
+    if(!S.isAdmin)return;
     if(!confirm('Mark this client as cancelled? Commission will stop from this point.'))return;
     await dbPatch('tracker_signups',b.dataset.cancelclient,{client_cancelled:true,recurring_active:false});
     await loadAll();});
@@ -3175,7 +3190,7 @@ function bind(){
   document.querySelectorAll('[data-startrecurring]').forEach(b=>b.onclick=async()=>{
     await dbPatch('tracker_signups',b.dataset.startrecurring,{recurring_active:true,recurring_start_date:new Date().toISOString().slice(0,10)});
     await loadAll();});
-  document.querySelectorAll('[data-delsg]').forEach(b=>b.onclick=async()=>{await dbDelete('tracker_signups',b.dataset.delsg);await loadAll();});
+  document.querySelectorAll('[data-delsg]').forEach(b=>b.onclick=async()=>{if(!canDelete())return;await dbDelete('tracker_signups',b.dataset.delsg);await loadAll();});
   // Award bonus
   document.querySelectorAll('[data-awardbtn]').forEach(b=>b.onclick=()=>{S.showAwardModal=true;S.awardStaff=b.dataset.awardbtn;r();});
   const abcm=document.getElementById('abcm');if(abcm)abcm.onclick=()=>{S.showAwardModal=false;r();};
@@ -3211,6 +3226,7 @@ function bind(){
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];S.busyFormSnap=null;r();};
   const bdel=document.getElementById('bdel');
   if(bdel)bdel.onclick=async()=>{
+    if(!canDelete())return;
     if(!S.editBusyId)return;
     await dbDelete('tracker_busy_blocks',S.editBusyId);
     S.showBusyModal=false;S.editBusyId=null;S.busyErr='';S.busyTeamSel=[];S.busyFormSnap=null;await loadAll();
@@ -3252,6 +3268,7 @@ function bind(){
   if(gccm)gccm.onclick=()=>{S.showGroupCallModal=false;S.editGroupCallId=null;S.groupCallErr='';S.gcAttendeesSel=[];S.gcFormSnap=null;r();};
   const gcdel=document.getElementById('gcdel');
   if(gcdel)gcdel.onclick=async()=>{
+    if(!canDelete())return;
     if(!S.editGroupCallId)return;
     await dbDelete('tracker_group_calls',S.editGroupCallId);
     S.showGroupCallModal=false;S.editGroupCallId=null;S.groupCallErr='';S.gcAttendeesSel=[];S.gcFormSnap=null;await loadAll();
@@ -3307,7 +3324,7 @@ function bind(){
 
   // Upsells
   document.querySelectorAll('[data-uf]').forEach(f=>f.onclick=()=>{S.upsellFilter=f.dataset.uf;r();});
-  document.querySelectorAll('[data-delu]').forEach(b=>b.onclick=async()=>{await dbDelete('tracker_upsells',b.dataset.delu);await loadAll();});
+  document.querySelectorAll('[data-delu]').forEach(b=>b.onclick=async()=>{if(!canDelete())return;await dbDelete('tracker_upsells',b.dataset.delu);await loadAll();});
   const oum=document.getElementById('oum');
   if(oum)oum.onclick=()=>{S.showUpsellModal=true;S.editUpsellId=null;S.upsellProds=[];S.upsellErr='';S.upsellPrefillLeadId=null;S.upsellSelectedLeadId=null;r();};
   document.querySelectorAll('[data-quickupsell]').forEach(b=>b.onclick=()=>{
