@@ -318,7 +318,9 @@
   .dt-pill.dt-zero strong { color: var(--text-muted); }
 
   .pipeline-step { display:flex; align-items:center; gap:7px; width:100%; padding:5px 10px; border-radius:6px; border:1px solid; font-size:12px; font-family:var(--font); cursor:pointer; background:none; text-align:left; transition:all 0.15s; }
-  .pipeline-step:hover { background:rgba(255,255,255,0.06) !important; color:rgba(255,255,255,0.7) !important; border-color:rgba(255,255,255,0.25) !important; }
+  /* Only the clickable version reacts to hover. A lead someone else owns renders the same
+     steps as plain divs, and lighting those up would suggest they can be changed. */
+  button.pipeline-step:hover { background:rgba(255,255,255,0.06) !important; color:rgba(255,255,255,0.7) !important; border-color:rgba(255,255,255,0.25) !important; }
   .pipe-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
 
   .upcoming-demo-item { background: var(--navy-mid); border: 1px solid rgba(250,199,117,0.2); border-radius: 10px; padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px; }
@@ -439,10 +441,17 @@ const GROUP_CALL_CAL_STAFF=['Ricky','Katherine','Zach'];
 function canSeeGroupCalls(){return S.isAdmin||GROUP_CALL_STAFF.includes(S.user);}
 function canSeeGroupCallsOnCal(){return S.isAdmin||GROUP_CALL_CAL_STAFF.includes(S.user);}
 // Deleting anything — a lead, an upsell, a busy block, a group call, a sign-up — is Jessie's
-// alone. Staff still create and edit their own records; they just never destroy one. Every
-// destructive control is hidden behind this and its handler re-checks it, so a stale button
-// left in the DOM by a race still cannot fire the delete.
+// alone. Staff still create their own records; they just never destroy one. Every destructive
+// control is hidden behind this and its handler re-checks it, so a stale button left in the
+// DOM by a race still cannot fire the delete.
 function canDelete(){return S.isAdmin;}
+// Editing a lead's contact details is Jessie's alone too, on every lead including the staff
+// member's own. Staff still CREATE leads and log activity against them (notes, demos,
+// reminders, status on their own); they just cannot go back and rewrite the record.
+function canEditLead(){return S.isAdmin;}
+// Moving a lead along the pipeline stays with whoever owns it, so a staff member still runs
+// their own funnel but cannot touch someone else's. Jessie can move any lead.
+function canSetStatus(lead){return S.isAdmin||(!!lead&&lead.staff===S.user);}
 // Cancelling a demo wipes it from the shared calendar for everyone, so it is a delete in all
 // but name. Rescheduling stays open to the demo's owner.
 function canCancelDemo(){return S.isAdmin;}
@@ -1447,8 +1456,9 @@ function leadsTab(vis,staffTotal){
       <tbody>
       ${vis.slice().reverse().map(l=>{
         const exp=S.expanded[l.id];
-        // Own the lead (or admin) → full contact + account + edit. Other staff → company/name/email only.
-        // Delete is not part of "own": only Jessie ever sees it (canDelete).
+        // Own the lead (or admin) → full contact + account. Other staff → company/name/email only.
+        // "own" governs what is VISIBLE and what activity can be logged. It no longer grants
+        // edit or delete: both of those are Jessie's alone (canEditLead / canDelete).
         const own=S.isAdmin||l.staff===S.user;
         const upD=(l.demos||[]).find(d=>d.status==='upcoming');
         const pR=(l.reminders||[]).filter(r=>!r.done).length;
@@ -1470,15 +1480,22 @@ function leadsTab(vis,staffTotal){
                 const isCurr=l.status===s;
                 const smap={'Contacted':'contacted','Demo booked':'demo','Converted':'converted','Partnership':'partnership','Lost':'lost'};
                 const col={Contacted:'#74b9ff','Demo booked':'#fac775',Converted:'#3bbfad',Partnership:'#a29bfe',Lost:'#ff7675'}[s];
+                const style=isCurr?`background:${col}18;border-color:${col};color:${col};font-weight:600`:`border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3)`;
+                const inner=`<span class="pipe-dot" style="background:${isCurr?col:'rgba(255,255,255,0.15)'}"></span>
+                  ${s}
+                  ${isCurr?'<span style="margin-left:auto;font-size:10px">●</span>':''}`;
+                // Someone else's lead: the funnel still shows where it has got to, but as plain
+                // divs. No button, no data-setstatus, so there is nothing to click and nothing
+                // a stale node could fire.
+                if(!canSetStatus(l))return`<div class="pipeline-step ${isCurr?'pipeline-active':''}" style="${style};cursor:default;opacity:${isCurr?'1':'0.55'}">${inner}</div>`;
                 return`<button
                   class="pipeline-step ${isCurr?'pipeline-active':''}"
                   data-setstatus="${s}" data-lid="${l.id}"
-                  style="${isCurr?`background:${col}18;border-color:${col};color:${col};font-weight:600`:`border-color:rgba(255,255,255,0.1);color:rgba(255,255,255,0.3)`}">
-                  <span class="pipe-dot" style="background:${isCurr?col:'rgba(255,255,255,0.15)'}"></span>
-                  ${s}
-                  ${isCurr?'<span style="margin-left:auto;font-size:10px">●</span>':''}
+                  style="${style}">
+                  ${inner}
                 </button>`;
               }).join('')}
+              ${!canSetStatus(l)?`<div style="font-size:10px;color:var(--text-muted);margin-top:2px">${l.staff}'s lead — view only</div>`:''}
             </div>
           </td>
           <td style="min-width:200px">
@@ -1551,7 +1568,9 @@ function leadsTab(vis,staffTotal){
                 </div>`).join('')}
               </div>`:''}
               <div class="activity-section">
-                <div class="activity-label">Notes</div>
+                <!-- Notes are append-only for everyone: a saved note is a record of what was
+                     said and when, so nothing here is ever editable. Add is the only write. -->
+                <div class="activity-label">Notes ${l.notes.length?`<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:10px">· saved notes are read-only</span>`:''}</div>
                 ${l.notes.length===0?`<p style="font-size:12px;color:var(--text-muted)">No notes yet.</p>`:''}
                 ${l.notes.map(n=>`<div class="note-card"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}
                 <div class="note-add-form">
@@ -1563,7 +1582,7 @@ function leadsTab(vis,staffTotal){
           </td>
           <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${l.date}</td>
           <td style="white-space:nowrap">
-            ${own?`<button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>`:''}
+            ${canEditLead()?`<button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>`:''}
             ${canDelete()?`<button class="icon-btn danger" data-del="${l.id}" title="Delete">×</button>`:''}
           </td>
         </tr>`;
@@ -2846,7 +2865,7 @@ function bind(){
   document.querySelectorAll('[data-tab]').forEach(t=>t.onclick=()=>{S.tab=t.dataset.tab;r();});
   document.querySelectorAll('[data-f]').forEach(f=>f.onclick=()=>{S.filter=f.dataset.f;r();});
   document.querySelectorAll('[data-del]').forEach(d=>d.onclick=async()=>{if(!canDelete())return;await dbDelete('tracker_leads',d.dataset.del);await loadAll();});
-  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const l=S.leads.find(x=>x.id===b.dataset.edit);if(!l)return;S.showModal=true;S.editId=l.id;S.mProds=[...l.products];S.mErr='';r();});
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{if(!canEditLead())return;const l=S.leads.find(x=>x.id===b.dataset.edit);if(!l)return;S.showModal=true;S.editId=l.id;S.mProds=[...l.products];S.mErr='';r();});
   document.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>{const id=b.dataset.exp;S.expanded[id]=!S.expanded[id];r();});
   // Filtering has to re-render, and r() throws the focused input away with the rest of the tree.
   // The caret offset is carried across in S._searchCaret and reapplied here, otherwise typing a
@@ -3013,6 +3032,7 @@ function bind(){
   document.querySelectorAll('[data-dismiss]').forEach(b=>b.onclick=()=>{S.dismissedAlerts[b.dataset.dismiss]=true;r();});
   document.querySelectorAll('[data-setstatus]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);if(!l)return;
+    if(!canSetStatus(l))return;
     const newStatus=b.dataset.setstatus;if(l.status===newStatus)return;
     const old=l.status;
     await dbPatch('tracker_leads',l.id,{status:newStatus});
