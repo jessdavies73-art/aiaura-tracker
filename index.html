@@ -289,6 +289,14 @@
   .email-btn { font-size: 11px; padding: 5px 12px; border-radius: 6px; background: rgba(116,185,255,0.1); border: 1px solid rgba(116,185,255,0.3); color: #74b9ff; cursor: pointer; font-family: var(--font); white-space: nowrap; text-decoration: none; display: inline-block; text-align: center; }
   .email-btn:hover { background: rgba(116,185,255,0.2); color: #fff; }
 
+  /* WHATSAPP DEMO CONFIRMATION */
+  .wa-wrap { display: flex; flex-direction: column; gap: 6px; }
+  .wa-btn { font-size: 11px; padding: 5px 12px; border-radius: 6px; background: rgba(37,211,102,0.12); border: 1px solid rgba(37,211,102,0.45); color: #25d366; cursor: pointer; font-family: var(--font); white-space: nowrap; text-align: center; font-weight: 600; }
+  .wa-btn:hover { background: rgba(37,211,102,0.25); color: #fff; }
+  .wa-hint { font-size: 11px; color: var(--text-muted); font-style: italic; }
+  .wa-prompt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; background: rgba(37,211,102,0.06); border: 1px solid rgba(37,211,102,0.22); border-radius: 8px; padding: 8px 10px; }
+  .wa-prompt-q { font-size: 11px; color: var(--text-secondary); }
+
   .pipeline-step { display:flex; align-items:center; gap:7px; width:100%; padding:5px 10px; border-radius:6px; border:1px solid; font-size:12px; font-family:var(--font); cursor:pointer; background:none; text-align:left; transition:all 0.15s; }
   .pipeline-step:hover { background:rgba(255,255,255,0.06) !important; color:rgba(255,255,255,0.7) !important; border-color:rgba(255,255,255,0.25) !important; }
   .pipe-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
@@ -421,6 +429,44 @@ function roomForDemo(lead,demo){
 }
 function fmtInviteDate(dt){return new Date(dt).toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});}
 function fmtInviteTime(dt){return new Date(dt).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
+
+// wa.me wants digits only, no plus, no spaces, and a country code. Saved numbers are typed by
+// hand so they arrive as "07700 000000", "+44 7700 000000", "0044…" or already normalised.
+// A leading 0 is assumed UK because that is the only market the team sells into today.
+function waPhone(raw){
+  const s=String(raw||'').trim();
+  if(!s)return'';
+  if(s.startsWith('+'))return s.slice(1).replace(/\D/g,'');
+  const d=s.replace(/\D/g,'');
+  if(!d)return'';
+  if(d.startsWith('00'))return d.slice(2);
+  if(d.startsWith('0'))return'44'+d.slice(1);
+  return d;
+}
+// Signed with the lead owner's name, not the logged-in user's, so it matches the invite email
+// (send-invite posts staffName:l.staff) and the name the prospect already knows.
+function waMessage(l,d){
+  return`Hi ${l.contactName||'there'}, just confirming your demo with PRODICTA on ${fmtInviteDate(d.dt)} at ${fmtInviteTime(d.dt)}. You can join here: ${roomForDemo(l,d)}. Looking forward to speaking with you. ${l.staff||''}`.trim();
+}
+function waLink(l,d){
+  const p=waPhone(l.contactPhone);
+  return p?`https://wa.me/${p}?text=${encodeURIComponent(waMessage(l,d))}`:'';
+}
+// Shared by the lead activity panel and the Today tab so the button, the missing-phone hint and
+// the "did you send it?" prompt behave identically wherever an upcoming demo is shown.
+function waBlock(l,d){
+  const url=waLink(l,d);
+  if(!url)return`<div class="wa-hint">Add phone number to send WhatsApp</div>`;
+  const key=d.id+'-'+l.id;
+  return`<div class="wa-wrap">
+    <button class="wa-btn" data-wasend="${url}" data-wakey="${key}">💬 Send via WhatsApp</button>
+    ${S.waPrompt===key?`<div class="wa-prompt">
+      <span class="wa-prompt-q">Did you send the WhatsApp message?</span>
+      <button class="demo-action-btn done-btn" data-waconfirm="${key}" data-lid="${l.id}">Yes, sent</button>
+      <button class="demo-action-btn" style="border-color:rgba(255,255,255,0.2);color:var(--text-muted)" data-wadismiss="${key}">Not yet</button>
+    </div>`:''}
+  </div>`;
+}
 const SEND_INVITE_URL='https://aiaura-tracker-api.vercel.app/api/send-invite';
 const STATUSES=['Contacted','Demo booked','Converted','Partnership','Lost'];
 // Busy-block types where "More information" is optional; every other type requires it.
@@ -749,6 +795,8 @@ let S={
   // Ticking an attendee re-renders the modal, so the typed date and agenda are snapshotted first.
   gcAttendeesSel:[],gcFormSnap:null,
   editDemoProdsKey:null,rescheduleAlerts:[],reschOldDt:'',
+  // Which demo's "did you send the WhatsApp?" prompt is open, keyed demoId-leadId. One at a time.
+  waPrompt:null,
   leads:[],upsells:[],signups:[],bonuses:[],
   _signupChkErr:'',objProd:'PRODICTA',objType:'Agency',objExpanded:{},objRoleType:'',
   callType:'Agency',callProd:'PRODICTA',inCall:false,callMessages:[],callLoading:false,callProspectInput:'',
@@ -1174,6 +1222,7 @@ function alertsTab(alerts,ml){
             <a class="call-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="background:rgba(46,204,113,0.18);border-color:rgba(46,204,113,0.6);color:#2ecc71;font-weight:600">🎥 Join Demo Room</a>
             ${own&&l.contactPhone?`<a class="call-btn" href="tel:${l.contactPhone}">📞 Call</a>`:''}
             ${l.contactEmail?`<a class="email-btn" href="mailto:${l.contactEmail}">✉ Email</a>`:''}
+            ${own?waBlock(l,d):''}
           </div>
         </div>`;
       }).join('')}
@@ -1356,6 +1405,7 @@ function leadsTab(vis){
                     <a class="demo-action-btn done-btn" href="${roomForDemo(l,d)}" target="_blank" rel="noopener" style="text-decoration:none;font-size:11px">🎥 Join Demo Room</a>
                     <button class="demo-action-btn" style="font-size:11px" data-copyroom="${roomForDemo(l,d)}">📋 Copy</button>
                   </div>`:''}
+                  ${own&&d.status==='upcoming'?`<div style="margin-top:8px">${waBlock(l,d)}</div>`:''}
                   ${(d.demoNotes||[]).length>0?`<div style="margin-top:8px">${(d.demoNotes||[]).map(n=>`<div class="note-card" style="border-color:rgba(250,199,117,0.35)"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}</div>`:''}
                   <div class="demo-note-form" style="margin-top:8px">
                     <textarea placeholder="${d.status==='upcoming'?'Add a pre-demo note...':'Add a note from this demo...'}" data-dni="${d.id}-${l.id}">${S.demoNoteInputs[d.id+'-'+l.id]||''}</textarea>
@@ -2738,6 +2788,22 @@ function bind(){
     try{await navigator.clipboard.writeText(url);const orig=b.textContent;b.textContent='✓ Copied';setTimeout(()=>{b.textContent=orig;},1500);}
     catch(e){const orig=b.textContent;b.textContent='✗ Failed';setTimeout(()=>{b.textContent=orig;},1500);}
   });
+  // window.open rather than an <a target="_blank">, because the prompt re-render tears the element
+  // out of the DOM mid-click and the browser then drops the anchor's pending navigation.
+  document.querySelectorAll('[data-wasend]').forEach(b=>b.onclick=()=>{
+    const url=b.dataset.wasend;if(!url)return;
+    window.open(url,'_blank','noopener');
+    S.waPrompt=b.dataset.wakey;r();});
+  document.querySelectorAll('[data-waconfirm]').forEach(b=>b.onclick=async()=>{
+    const l=S.leads.find(x=>x.id===b.dataset.lid);
+    S.waPrompt=null;
+    if(!l){r();return;}
+    const n=new Date();
+    const dt=n.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    const tm=n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`WhatsApp confirmation sent to ${l.contactName||'contact'} on ${dt} at ${tm} by ${S.user}`});
+    await loadAll();});
+  document.querySelectorAll('[data-wadismiss]').forEach(b=>b.onclick=()=>{S.waPrompt=null;r();});
   document.querySelectorAll('[data-sendinvite]').forEach(b=>b.onclick=async()=>{
     const l=S.leads.find(x=>x.id===b.dataset.lid);
     const d=l&&l.demos.find(x=>x.id===b.dataset.sendinvite);
