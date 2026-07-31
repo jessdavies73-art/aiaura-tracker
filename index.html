@@ -445,8 +445,13 @@ function waPhone(raw){
 }
 // Signed with the lead owner's name, not the logged-in user's, so it matches the invite email
 // (send-invite posts staffName:l.staff) and the name the prospect already knows.
+// d is null for a lead sitting at "Demo booked" with nothing in the calendar behind it. There is
+// no date to quote in that case, so the sentence drops the when rather than inventing one.
 function waMessage(l,d){
-  return`Hi ${l.contactName||'there'}, just confirming your demo with PRODICTA on ${fmtInviteDate(d.dt)} at ${fmtInviteTime(d.dt)}. You can join here: ${roomForDemo(l,d)}. Looking forward to speaking with you. ${l.staff||''}`.trim();
+  const when=(d&&d.dt)
+    ?`your demo with PRODICTA on ${fmtInviteDate(d.dt)} at ${fmtInviteTime(d.dt)}`
+    :`your upcoming demo with PRODICTA`;
+  return`Hi ${l.contactName||'there'}, just confirming ${when}. You can join here: ${roomForDemo(l,d)}. Looking forward to speaking with you. ${l.staff||''}`.trim();
 }
 function waLink(l,d){
   const p=waPhone(l.contactPhone);
@@ -457,7 +462,7 @@ function waLink(l,d){
 function waBlock(l,d){
   const url=waLink(l,d);
   if(!url)return`<div class="wa-hint">Add phone number to send WhatsApp</div>`;
-  const key=d.id+'-'+l.id;
+  const key=(d&&d.id?d.id:'nodemo')+'-'+l.id;
   return`<div class="wa-wrap">
     <button class="wa-btn" data-wasend="${url}" data-wakey="${key}">💬 Send via WhatsApp</button>
     ${S.waPrompt===key?`<div class="wa-prompt">
@@ -1418,6 +1423,11 @@ function leadsTab(vis){
                     <button class="demo-action-btn cancel-btn" data-canceldemo="${d.id}" data-lid="${l.id}">✕ Cancel</button>
                   </div>`;})():''}
                 </div>`).join('')}
+              </div>`:''}
+              ${own&&l.status==='Demo booked'&&!upD?`<div class="activity-section">
+                <div class="activity-label">Demo confirmation</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Nothing in the calendar for this lead, so the message confirms the demo without a date or time.</div>
+                ${waBlock(l,null)}
               </div>`:''}
               ${(l.reminders||[]).length>0?`<div class="activity-section">
                 <div class="activity-label">Reminders</div>
