@@ -898,27 +898,42 @@ function mondayOf(from,weeksAhead){
   m.setDate(m.getDate()+(dow===0?-6:1-dow)+(weeksAhead||0)*7);
   return m;
 }
-// Upcoming demos per staff member starting inside [start,end). Status is checked rather than the
-// date alone, so a cancelled or already-completed demo never counts even if it sits in the week.
-function demoWeekCounts(leads,names,start,end){
-  return names.map(name=>({name,count:(leads||[]).reduce((a,l)=>l.staff!==name?a:a+(l.demos||[]).filter(d=>{
-    if(d.status!=='upcoming')return false;
-    const t=new Date(d.dt);
-    return !isNaN(t)&&t>=start&&t<end;
-  }).length,0)}));
+// A booked demo lives in one of two places and the totals have to read both.
+//   tracker_demos  — the formal record, created by "+ Demo" on a lead. Carries a status, so a
+//                    cancelled or completed one can be told apart and dropped.
+//   tracker_busy_blocks with type 'demo' — what the team actually books, off "+ Block time" on
+//                    the calendar. No status column exists, so every one in the week counts.
+// Reading only the first is what made this bar show zero for everyone: tracker_demos is empty,
+// while the demos on the calendar are all busy blocks.
+// Both store their datetime as text already localised by utcToLocal, "2026-07-28T14:00", which
+// new Date() reads as local time. Boundaries are local midnight Mondays, so the two line up.
+function demoStartsFor(name,start,end){
+  const starts=[];
+  (S.leads||[]).forEach(l=>{
+    if(l.staff!==name)return;
+    (l.demos||[]).forEach(d=>{if(d.status==='upcoming')starts.push(d.dt);});
+  });
+  (S.busyBlocks||[]).forEach(b=>{
+    if(b.staff!==name||b.type!=='demo')return;
+    starts.push(b.start);
+  });
+  return starts.filter(v=>{const t=new Date(v);return !isNaN(t)&&t>=start&&t<end;}).length;
+}
+function demoWeekCounts(names,start,end){
+  return names.map(name=>({name,count:demoStartsFor(name,start,end)}));
 }
 // Admin-only bar, shown on both the leads log and the calendar. Split by week rather than given
 // as one running total: a rep with four demos all in a fortnight's time has an empty week now,
 // and a single number hides that until it is too late to fix.
-// Counts come off S.leads, not the filtered view, so the search box and the staff pills cannot
-// quietly change the totals.
+// Counts come off S.leads and S.busyBlocks, not the filtered view, so the search box and the
+// staff pills cannot quietly change the totals.
 function demoTotalsBar(){
   if(!S.isAdmin)return'';
   const names=rosterForView();
   if(!names.length)return'';
   const now=new Date();
   const w0=mondayOf(now,0),w1=mondayOf(now,1),w2=mondayOf(now,2);
-  const rows=[['This week',demoWeekCounts(S.leads,names,w0,w1)],['Next week',demoWeekCounts(S.leads,names,w1,w2)]];
+  const rows=[['This week',demoWeekCounts(names,w0,w1)],['Next week',demoWeekCounts(names,w1,w2)]];
   return`<div class="demo-totals">
     <div class="dt-title">Upcoming demos booked</div>
     ${rows.map(([label,counts])=>`<div class="dt-row">
