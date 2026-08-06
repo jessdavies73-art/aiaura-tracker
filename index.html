@@ -445,10 +445,10 @@ function canSeeGroupCallsOnCal(){return S.isAdmin||GROUP_CALL_CAL_STAFF.includes
 // control is hidden behind this and its handler re-checks it, so a stale button left in the
 // DOM by a race still cannot fire the delete.
 function canDelete(){return S.isAdmin;}
-// Editing a lead's contact details is Jessie's alone too, on every lead including the staff
-// member's own. Staff still CREATE leads and log activity against them (notes, demos,
-// reminders, status on their own); they just cannot go back and rewrite the record.
-function canEditLead(){return S.isAdmin;}
+// Editing a lead's contact details stays with whoever owns it: a staff member corrects a
+// wrong number or email on their own lead without waiting on Jessie, and cannot touch
+// someone else's. Jessie can edit any lead. Deleting is still hers alone (canDelete).
+function canEditLead(lead){return S.isAdmin||(!!lead&&lead.staff===S.user);}
 // Moving a lead along the pipeline stays with whoever owns it, so a staff member still runs
 // their own funnel but cannot touch someone else's. Jessie can move any lead.
 function canSetStatus(lead){return S.isAdmin||(!!lead&&lead.staff===S.user);}
@@ -1456,9 +1456,8 @@ function leadsTab(vis,staffTotal){
       <tbody>
       ${vis.slice().reverse().map(l=>{
         const exp=S.expanded[l.id];
-        // Own the lead (or admin) → full contact + account. Other staff → company/name/email only.
-        // "own" governs what is VISIBLE and what activity can be logged. It no longer grants
-        // edit or delete: both of those are Jessie's alone (canEditLead / canDelete).
+        // Own the lead (or admin) → full contact + account + edit. Other staff → company/name/email only.
+        // Delete is not part of "own": only Jessie ever sees it (canDelete).
         const own=S.isAdmin||l.staff===S.user;
         const upD=(l.demos||[]).find(d=>d.status==='upcoming');
         const pR=(l.reminders||[]).filter(r=>!r.done).length;
@@ -1582,7 +1581,7 @@ function leadsTab(vis,staffTotal){
           </td>
           <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${l.date}</td>
           <td style="white-space:nowrap">
-            ${canEditLead()?`<button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>`:''}
+            ${canEditLead(l)?`<button class="icon-btn" data-edit="${l.id}" title="Edit">✎</button>`:''}
             ${canDelete()?`<button class="icon-btn danger" data-del="${l.id}" title="Delete">×</button>`:''}
           </td>
         </tr>`;
@@ -2865,7 +2864,7 @@ function bind(){
   document.querySelectorAll('[data-tab]').forEach(t=>t.onclick=()=>{S.tab=t.dataset.tab;r();});
   document.querySelectorAll('[data-f]').forEach(f=>f.onclick=()=>{S.filter=f.dataset.f;r();});
   document.querySelectorAll('[data-del]').forEach(d=>d.onclick=async()=>{if(!canDelete())return;await dbDelete('tracker_leads',d.dataset.del);await loadAll();});
-  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{if(!canEditLead())return;const l=S.leads.find(x=>x.id===b.dataset.edit);if(!l)return;S.showModal=true;S.editId=l.id;S.mProds=[...l.products];S.mErr='';r();});
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const l=S.leads.find(x=>x.id===b.dataset.edit);if(!l)return;if(!canEditLead(l))return;S.showModal=true;S.editId=l.id;S.mProds=[...l.products];S.mErr='';r();});
   document.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>{const id=b.dataset.exp;S.expanded[id]=!S.expanded[id];r();});
   // Filtering has to re-render, and r() throws the focused input away with the rest of the tree.
   // The caret offset is carried across in S._searchCaret and reapplied here, otherwise typing a
