@@ -350,6 +350,9 @@
   .cal-cell.today-col { background: rgba(59,191,173,0.04); }
   .cal-event { position: absolute; left: 2px; right: 2px; display: flex; align-items: flex-start; border-radius: 4px; padding: 2px 5px; font-size: 10px; font-weight: 500; overflow: hidden; white-space: nowrap; z-index: 2; cursor: pointer; line-height: 1.4; transition: filter 0.12s, transform 0.12s, box-shadow 0.12s; }
   .cal-event:hover { filter: brightness(1.2); transform: translateY(-1px); box-shadow: 0 2px 8px rgba(0,0,0,0.35); z-index: 3; }
+  /* A block the viewer cannot edit is still readable, and still lifts on hover so its label and
+     tooltip stay reachable, but it never offers a pointer it would not honour. */
+  .cal-event.cal-event-readonly { cursor: default; }
   /* Label truncates on its own so the dot and Join link survive at narrow widths. */
   .cal-event-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cal-event-narrow { padding: 2px 3px; font-size: 9px; }
@@ -444,14 +447,49 @@ function canSeeGroupCallsOnCal(){return S.isAdmin||GROUP_CALL_CAL_STAFF.includes
 // alone. Staff still create their own records; they just never destroy one. Every destructive
 // control is hidden behind this and its handler re-checks it, so a stale button left in the
 // DOM by a race still cannot fire the delete.
+// The one exception is a busy block someone created themselves — see canDeleteBusy — which is
+// deliberately its own function so widening it can never widen lead or upsell deletion.
 function canDelete(){return S.isAdmin;}
+// Staff who work the whole shared funnel rather than only their own leads: they may move any
+// lead they can already see along the pipeline. Ownership still gates editing a lead's details.
+const PIPELINE_ANY_STAFF=['Zach'];
+// Staff held to their own diary: they may edit and delete a busy block they created and must
+// not touch anyone else's. Anyone not listed keeps the behaviour they had before.
+const OWN_CALENDAR_STAFF=['Zach'];
 // Editing a lead's contact details stays with whoever owns it: a staff member corrects a
 // wrong number or email on their own lead without waiting on Jessie, and cannot touch
 // someone else's. Jessie can edit any lead. Deleting is still hers alone (canDelete).
 function canEditLead(lead){return S.isAdmin||(!!lead&&lead.staff===S.user);}
 // Moving a lead along the pipeline stays with whoever owns it, so a staff member still runs
-// their own funnel but cannot touch someone else's. Jessie can move any lead.
-function canSetStatus(lead){return S.isAdmin||(!!lead&&lead.staff===S.user);}
+// their own funnel but cannot touch someone else's. Jessie can move any lead, and anyone in
+// PIPELINE_ANY_STAFF can move any lead their visibility already lets them open — the gate for
+// them is canSeeLead, not ownership.
+function canSetStatus(lead){
+  if(S.isAdmin)return true;
+  if(!lead)return false;
+  if(PIPELINE_ANY_STAFF.includes(S.user))return canSeeLead(lead);
+  return lead.staff===S.user;
+}
+// Notes are append-only for everyone (see the Notes block on the lead card): anyone who can see
+// a lead may add one, and nobody — Jessie included — can edit or delete one once saved. Add is
+// the only write there has ever been, so this gate is visibility rather than ownership.
+function canAddNote(lead){return canSeeLead(lead);}
+// Editing a busy block. Jessie edits any diary. OWN_CALENDAR_STAFF are held to their own, so a
+// calendar chip for someone else's block carries no click handler for them at all and there is
+// nothing to open. A null block is a new one being created, which is always allowed.
+function canEditBusy(block){
+  if(S.isAdmin)return true;
+  if(!block)return true;
+  if(OWN_CALENDAR_STAFF.includes(S.user))return block.staff===S.user;
+  return true;
+}
+// Deleting a busy block. Jessie deletes any; OWN_CALENDAR_STAFF delete only the ones they own.
+// This is the single carve-out from canDelete and it stops at busy blocks: leads, upsells,
+// sign-ups and group calls all stay Jessie's alone.
+function canDeleteBusy(block){
+  if(canDelete())return true;
+  return!!block&&OWN_CALENDAR_STAFF.includes(S.user)&&block.staff===S.user;
+}
 // Cancelling a demo wipes it from the shared calendar for everyone, so it is a delete in all
 // but name. Rescheduling stays open to the demo's owner.
 function canCancelDemo(){return S.isAdmin;}
@@ -888,6 +926,11 @@ function teamPickerNames(){
 // Owners whose names are offered as leaderboard rows / filter pills for the current viewer.
 function rosterForView(){return S.isAdmin?staffVisibleTo():visibleOwners(S.user);}
 function myLeads(){return S.isAdmin?S.leads:S.leads.filter(l=>visibleOwners(S.user).includes(l.staff));}
+// Whether a viewer may see one lead at all. Shares visibleOwners with myLeads() on purpose, so
+// a permission check can never drift from the list it is meant to guard. Note this is wider
+// than "Ricky and Katherine's leads" for Zach: Kenny is unlisted but cleared to him, so his
+// leads count as visible here too.
+function canSeeLead(lead){return!!lead&&(S.isAdmin||visibleOwners(S.user).includes(lead.staff));}
 // Upsells stay private to their owner: each staff member only sees their own upsells.
 function myUpsells(){return S.isAdmin?S.upsells:S.upsells.filter(u=>u.staff===S.user);}
 
@@ -1542,10 +1585,10 @@ function leadsTab(vis,staffTotal){
                   </div>`:''}
                   ${own&&d.status==='upcoming'?`<div style="margin-top:8px">${waBlock(l,d)}</div>`:''}
                   ${(d.demoNotes||[]).length>0?`<div style="margin-top:8px">${(d.demoNotes||[]).map(n=>`<div class="note-card" style="border-color:rgba(250,199,117,0.35)"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}</div>`:''}
-                  <div class="demo-note-form" style="margin-top:8px">
+                  ${canAddNote(l)?`<div class="demo-note-form" style="margin-top:8px">
                     <textarea placeholder="${d.status==='upcoming'?'Add a pre-demo note...':'Add a note from this demo...'}" data-dni="${d.id}-${l.id}">${S.demoNoteInputs[d.id+'-'+l.id]||''}</textarea>
                     <button data-dnadd="${d.id}" data-lid="${l.id}">+ Note</button>
-                  </div>
+                  </div>`:''}
                   ${own&&d.status==='upcoming'?(()=>{const hasInviteEmails=(d.attendees||[]).some(a=>a&&a.email&&String(a.email).trim());return`<div class="demo-actions">
                     <button class="demo-action-btn done-btn" data-demodone="${d.id}" data-lid="${l.id}">✓ Mark done</button>
                     <button class="demo-action-btn reschedule-btn" data-resch="${d.id}" data-lid="${l.id}">↺ Reschedule</button>
@@ -1568,14 +1611,17 @@ function leadsTab(vis,staffTotal){
               </div>`:''}
               <div class="activity-section">
                 <!-- Notes are append-only for everyone: a saved note is a record of what was
-                     said and when, so nothing here is ever editable. Add is the only write. -->
+                     said and when, so nothing here is ever editable by anyone, Jessie included.
+                     Add is the only write, and it is open to anyone who can see the lead rather
+                     than to its owner alone (canAddNote) — the whole point of a shared note is
+                     that a colleague working the account can leave one. -->
                 <div class="activity-label">Notes ${l.notes.length?`<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted);font-size:10px">· saved notes are read-only</span>`:''}</div>
                 ${l.notes.length===0?`<p style="font-size:12px;color:var(--text-muted)">No notes yet.</p>`:''}
                 ${l.notes.map(n=>`<div class="note-card"><div class="note-ts">${n.ts}</div><div class="note-txt">${n.txt}</div></div>`).join('')}
-                <div class="note-add-form">
+                ${canAddNote(l)?`<div class="note-add-form">
                   <textarea placeholder="Add a note..." data-ni="n-${l.id}">${ni}</textarea>
                   <button data-nadd="${l.id}">+ Note</button>
-                </div>
+                </div>`:''}
               </div>
             </div>`:''}
           </td>
@@ -1717,7 +1763,7 @@ function calendarTab(){
       const be=new Date(b.end);
       const tlbl=TYPE_LABELS[b.type]||b.type||'Busy';
       const chip=`${b.staff}: ${tlbl}${b.company?' · '+b.company:''}`;
-      evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:chip,moreInfo:b.label,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff'});
+      evts.push({type:'busy',subtype:b.type,start:bs,durationMins:Math.round((be-bs)/60000),label:chip,moreInfo:b.label,staff:b.staff,team,id:b.id,color:STAFF_COLORS[b.staff]||'#fff',canEdit:canEditBusy(b)});
     });
     // Group calls belong to the whole team rather than one diary, so they are not filtered by
     // owner — the gate is who may see group calls at all, which excludes Kenny.
@@ -1844,7 +1890,12 @@ function calendarTab(){
                 ?`onclick="event.stopPropagation();window.__editDemo('${e.demoId}','${e.leadId}')" data-editdemo="${e.demoId}" data-editleadid="${e.leadId}"`
                 :e.type==='groupcall'
                 ?`onclick="event.stopPropagation();window.__openGroupCall('${e.id}')"`
-                :`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`;
+                :e.canEdit
+                ?`onclick="event.stopPropagation();window.__editBusy('${e.id}')" data-editbusy="${e.id}"`
+                // Someone else's diary for a viewer held to their own: the block still shows,
+                // with its label and tooltip, but there is no handler and no data-editbusy, so
+                // there is nothing to click and nothing a stale node could fire.
+                :'';
               const teamSuffix=(!narrow&&Array.isArray(e.team)&&e.team.length)?` <span style="opacity:0.75;font-weight:400">+ ${e.team.join(', ')}</span>`:'';
               const meetIcon=((e.type==='demo'||e.type==='groupcall')&&e.meetLink&&!tight)?` <a href="${e.meetLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Join meeting — ${e.meetLink}" style="flex-shrink:0;margin-left:${narrow?2:4}px;padding:0 ${narrow?2:4}px;border-radius:3px;background:rgba(59,191,173,0.18);color:#3bbfad;text-decoration:none;font-size:10px">🎥${narrow?'':' Join'}</a>`:'';
               const attCount=Array.isArray(e.attendees)?e.attendees.length:0;
@@ -1854,7 +1905,7 @@ function calendarTab(){
               if(e.moreInfo&&e.moreInfo!==e.subtype)titleParts.push(e.moreInfo);
               if(Array.isArray(e.team)&&e.team.length)titleParts.push(`with ${e.team.join(', ')}`);
               const titleAttr=titleParts.join(' — ')+attTitle;
-              return`<div class="cal-event ${e.type==='demo'?'demo':e.type==='groupcall'?'groupcall':'busy-'+e.subtype} ${narrow?'cal-event-narrow':''}" style="${eventStyle(e,col,cols)}" title="${titleAttr}" ${attrs}>
+              return`<div class="cal-event ${e.type==='demo'?'demo':e.type==='groupcall'?'groupcall':'busy-'+e.subtype} ${narrow?'cal-event-narrow':''} ${e.type==='busy'&&!e.canEdit?'cal-event-readonly':''}" style="${eventStyle(e,col,cols)}" title="${titleAttr}" ${attrs}>
                 <span style="width:6px;height:6px;border-radius:50%;background:${e.color};margin:4px 3px 0 0;flex-shrink:0"></span><span class="cal-event-label">${e.label}${teamSuffix}${attChip}</span>${meetIcon}
               </div>`;
             }).join('')}
@@ -1895,7 +1946,7 @@ function busyModal(){
   }).join('');
   return`<div class="modal-overlay"><div class="modal">
     <h3>${editing?'Edit busy block':'Block out time'}</h3>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?(canDelete()?'Update or delete this busy block.':'Update this busy block.'):'Add a busy block — visible to everyone on the shared calendar.'}</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:1.25rem">${editing?(canDeleteBusy(existing)?'Update or delete this busy block.':'Update this busy block.'):'Add a busy block — visible to everyone on the shared calendar.'}</div>
     ${S.isAdmin
       ?`<div class="form-field"><label class="form-label">Staff member</label><select id="bstaff">${STAFF_OPTS.map(n=>`<option value="${n}"${n===staffVal?' selected':''}>${n}</option>`).join('')}</select></div>`
       :`<div style="font-size:13px;color:var(--text-secondary);margin-bottom:1rem">Blocking time for: <strong style="color:#fff">${staffVal}</strong></div>`}
@@ -1913,7 +1964,7 @@ function busyModal(){
     ${S.busyErr?`<p style="font-size:12px;color:#f09595;margin-bottom:8px">${S.busyErr}</p>`:''}
     <div class="modal-actions">
       <button class="btn-cancel" id="bcm">Cancel</button>
-      ${editing&&canDelete()?`<button class="btn-cancel" id="bdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
+      ${editing&&canDeleteBusy(existing)?`<button class="btn-cancel" id="bdel" style="border-color:rgba(255,118,117,0.4);color:#ff7675;background:rgba(255,118,117,0.08)">Delete</button>`:''}
       <button class="btn-save" id="bsv">${editing?'Save changes':'Save block'}</button>
     </div>
   </div></div>`;}
@@ -2693,6 +2744,7 @@ window.__editDemo=function(demoId,leadId){
 window.__editBusy=function(id){
   const bl=S.busyBlocks.find(x=>x.id===id);
   if(!bl)return;
+  if(!canEditBusy(bl))return;
   S.editBusyId=id;
   S.showBusyModal=true;
   S.busyErr='';
@@ -2885,12 +2937,14 @@ function bind(){
   document.querySelectorAll('[data-dni]').forEach(ta=>ta.oninput=()=>{S.demoNoteInputs[ta.dataset.dni]=ta.value;});
   document.querySelectorAll('[data-nadd]').forEach(btn=>btn.onclick=async()=>{
     const id=btn.dataset.nadd;const txt=(S.noteInputs[`n-${id}`]||'').trim();if(!txt)return;
+    if(!canAddNote(S.leads.find(x=>x.id===id)))return;
     await dbPost('tracker_notes',{lead_id:id,ts:nowTs(),txt});
     S.noteInputs[`n-${id}`]='';await loadAll();});
   document.querySelectorAll('[data-dnadd]').forEach(btn=>btn.onclick=async()=>{
     const did2=btn.dataset.dnadd;const lid=btn.dataset.lid;const key=did2+'-'+lid;
     const txt=(S.demoNoteInputs[key]||'').trim();if(!txt)return;
-    const l=S.leads.find(x=>x.id===lid);const d=l&&l.demos.find(x=>x.id===did2);
+    const l=S.leads.find(x=>x.id===lid);if(!canAddNote(l))return;
+    const d=l&&l.demos.find(x=>x.id===did2);
     if(d){
       const newNotes=[...(d.demoNotes||[]),{ts:nowTs(),txt}];
       await dbPatch('tracker_demos',did2,{demo_notes:newNotes});
@@ -3035,7 +3089,11 @@ function bind(){
     const newStatus=b.dataset.setstatus;if(l.status===newStatus)return;
     const old=l.status;
     await dbPatch('tracker_leads',l.id,{status:newStatus});
-    await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Status changed: ${old} → ${newStatus}`});
+    // Until PIPELINE_ANY_STAFF existed, only the owner or Jessie could move a lead, so the note
+    // never needed to say who. Name the mover only when it was not the owner, which leaves every
+    // pre-existing note format untouched and annotates just the case that is newly possible.
+    const movedBy=l.staff===S.user?'':` (by ${S.user})`;
+    await dbPost('tracker_notes',{lead_id:l.id,ts:nowTs(),txt:`Status changed: ${old} → ${newStatus}${movedBy}`});
     let openDemo=false,openSignup=false,signupLeadId=null,signupProd='',signupPlan='',signupStaff='';
     if(newStatus==='Demo booked'){openDemo=true;}
     if(newStatus==='Lost'){
@@ -3245,13 +3303,16 @@ function bind(){
   const bcm=document.getElementById('bcm');if(bcm)bcm.onclick=()=>{S.showBusyModal=false;S.busyErr='';S.editBusyId=null;S.busyTeamSel=[];S.busyFormSnap=null;r();};
   const bdel=document.getElementById('bdel');
   if(bdel)bdel.onclick=async()=>{
-    if(!canDelete())return;
     if(!S.editBusyId)return;
+    if(!canDeleteBusy(S.busyBlocks.find(b=>b.id===S.editBusyId)))return;
     await dbDelete('tracker_busy_blocks',S.editBusyId);
     S.showBusyModal=false;S.editBusyId=null;S.busyErr='';S.busyTeamSel=[];S.busyFormSnap=null;await loadAll();
   };
   const bsv=document.getElementById('bsv');
   if(bsv)bsv.onclick=async()=>{
+    // Re-check on the way out as well as on the way in: the modal can only have been opened on
+    // an editable block, but the gate belongs next to the write.
+    if(S.editBusyId&&!canEditBusy(S.busyBlocks.find(b=>b.id===S.editBusyId)))return;
     const staff=S.isAdmin?(document.getElementById('bstaff')?.value||S.user):S.user;
     const start=document.getElementById('bstart').value;
     const end=document.getElementById('bend').value;
